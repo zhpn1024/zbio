@@ -418,3 +418,4 @@ def refGeneIter(file):
 			yield refGene(l)
 		except ValueError:
 			pass
+    
