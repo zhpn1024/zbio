@@ -218,7 +218,7 @@ def randOverlapIter(bedIterA, bedListB, func=overlap, ignoreStrand = True):
 			if ignoreStrand or a.strand == bedListB[i0].strand :
 				yield (a, bedListB[i1])
 
-def Bed2Seq(seq, bed):
+def bed2Seq(seq, bed):
   s = ''
   for e in bed.exons():
     es = seq[e.start:e.stop]
