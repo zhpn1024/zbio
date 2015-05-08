@@ -90,7 +90,7 @@ def faIter(file):
   if id != '' : yield (id, seq)
 
 class compRead:
-  def __init__(self, chr = '', p0 = 0):
+  def __init__(self, chr = '', p0 = 0, seq = ''):
     self.nrBases = []
     self.baseReps = []
     self.p0 = p0
@@ -98,6 +98,7 @@ class compRead:
     self.chr = chr
     self.intrPos = []
     self.intrLen = []
+    if seq != "": self.loadSeq(seq)
 
   def seq(self):
     return ''.join(self.nrBases)
@@ -137,12 +138,45 @@ class compRead:
   def __str__(self):
     return self.seq()
   
+  def fullSeq(self, nogap = True):
+    s = ''
+    for i in range(len(self.nrBases)):
+      s += self.nrBases[i] * self.baseReps[i]
+    if nogap or len(self.intrPos) == 0: return s
+    li = 0
+    pi = []
+    for i in range(len(self.intrPos)):
+      pi.append(self.intrPos[i] - li)
+      li += self.intrLen[i]
+    while i >= 0:
+      s = s[0:pi[i]]+("-%d-" % self.intrLen[i])+s[pi[i]:]
+      i -= 1
+    return s
+  
   def __repr__(self):
     s = "compRead object:\n"
     s += self.chr+":"+str(self.p0)+":"+str(self.length())+"\n"
     s += str(self) + "\n"
-    s += str(self.baseReps)
+    s += str(self.baseReps) + "\n"
+    s += '----'
+    for i in range(len(self.intrPos)):
+      s += "    ----"
+    s += "\n%-4d" % self.exonLen(0)
+    for i in range(len(self.intrPos)):
+      s += "%-4d%-4d" % (self.intrLen[i], self.exonLen(i+1))
     return  s
+  
+  def intrEnd(self, i):
+    return self.intrPos[i] + self.intrLen[i]
+  
+  def exonLen(self, i = 0):
+    i = int(i)
+    l = len(self.intrPos)
+    if i < 0: i += l + 1
+    if l == 0: return self.length()
+    elif i == 0: return self.intrPos[0]
+    elif i == l: return self.length() - self.intrEnd(i-1)
+    else : return self.intrPos[i] - self.intrEnd(i-1)
   
   def writeReads(self, rid = 0, fout = sys.stdout, contig = -1, strand = ''):
     cs = ''
@@ -156,6 +190,10 @@ class compRead:
     fout.write(self.seq()+"\n")
 
   def addBase(self, base, rep, gap = 0):
+    if len(base) != 1: 
+      print "addBase: Base error! '" + base +"'"
+      return
+    base = base.upper()
     if len(self.nrBases) == 0 or base != self.nrBases[-1]:
       self.nrBases.append(base)
       self.baseReps.append(rep)
@@ -166,32 +204,62 @@ class compRead:
       self.intrLen.append(gap)
     self.p += rep + gap
   
+  def loadSeq(self, seq, gap = 0):
+    lst = seq.strip().upper().replace('U','T').split("-")
+    for s in lst:
+      if s == "" : continue
+      elif s[0] in ['A','T','C','G']:
+        for base, rep in repBaseIter(s):
+          self.addBase(base, rep, gap)
+          gap = 0
+      else:
+        gap = int(s)
+  
   def headBaseIter(self):
-    if len(self.intrPos) == 0:
-      for i in range(len(self.nrBases)):
-        yield self.nrBases[i], self.baseReps[i], 0
-    else:
-      p = 0
-      ini = 0
-      for i in range(len(self.nrBases)):
-        if ini >= len(self.intrPos) or p + self.baseReps[i] <= self.intrPos[ini]:
-          yield self.nrBases[i], self.baseReps[i], 0 # Base, Rep, Gap
-          p += self.baseReps[i]
-        else:
-          if self.intrPos[ini] > p:
-            yield self.nrBases[i], self.intrPos[ini] - p, 0
-          res = self.baseReps[i] - (self.intrPos[ini] - p)
+    p = 0
+    ini = 0
+    for i in range(len(self.nrBases)):
+      if ini >= len(self.intrPos) or p + self.baseReps[i] <= self.intrPos[ini]:
+        yield self.nrBases[i], self.baseReps[i], 0 # Base, Rep, Gap
+        p += self.baseReps[i]
+      else:
+        if self.intrPos[ini] > p:
+          yield self.nrBases[i], self.intrPos[ini] - p, 0
+        res = self.baseReps[i] - (self.intrPos[ini] - p)
+        p = self.intrPos[ini]
+        ini += 1
+        while ini < len(self.intrPos) and res + self.intrEnd(ini-1) > self.intrPos[ini]:
+          exLen = self.exonLen(ini) # self.intrPos[ini] - self.intrEnd(ini-1)
+          yield self.nrBases[i], exLen, self.intrLen[ini-1] 
+          #print "i=%d,ini=%d,exLen=%d" % (i,ini,exLen)
+          res -= exLen
           p = self.intrPos[ini]
           ini += 1
-          while ini < len(self.intrPos) and p + res > self.intrPos[ini]:
-            exLen = self.intrPos[ini] - self.intrPos[ini-1] - self.intrLen[ini-1]
-            yield self.nrBases[i], exLen, self.intrLen[ini-1] 
-            res -= exLen
-            p = self.intrPos[ini]
-            ini += 1
-          yield self.nrBases[i], res, self.intrLen[ini-1]
-          p += res + self.intrLen[ini-1]
-
+        #print "i=%d,ini=%d" % (i,ini)
+        yield self.nrBases[i], res, self.intrLen[ini-1]
+        p += res + self.intrLen[ini-1]
+  
+  def tailBaseIter(self):
+    p = self.length()
+    ini = len(self.intrPos) - 1
+    for i in range(len(self.nrBases)-1, -1, -1):
+      if ini < 0 or p - self.baseReps[i] >= self.intrEnd(ini):
+        yield self.nrBases[i], self.baseReps[i], 0 # Base, Rep, Gap
+        p -= self.baseReps[i]
+      else:
+        if self.intrEnd(ini) < p:
+          yield self.nrBases[i], p - self.intrEnd(ini), 0
+        res = self.baseReps[i] - (p - self.intrEnd(ini))
+        p = self.intrEnd(ini)
+        ini -= 1
+        while ini >= 0 and self.intrPos[ini+1] - res < self.intrEnd(ini):
+          exLen = self.exonLen(ini+1) # self.intrPos[ini + 1] - self.intrEnd(ini)
+          yield self.nrBases[i], exLen, self.intrLen[ini+1] 
+          res -= exLen
+          p = self.intrEnd(ini)
+          ini -= 1
+        yield self.nrBases[i], res, self.intrLen[ini+1]
+        p -= res + self.intrLen[ini+1]
       
   def trimBase(self):
     self.p -= self.baseReps[-1]
@@ -210,6 +278,8 @@ class compRead:
       self.baseReps[0] += rep
     self.p0 -= rep + gap
     if gap > 0 :
+      for i in range(len(self.intrPos)):
+        self.intrPos[i] += gap
       self.intrPos[0:0] = [0]
       self.intrLen[0:0] = [gap]
     for i in range(len(self.intrPos)):
@@ -219,21 +289,25 @@ class compRead:
     if read.p0 >= self.p0: return 1
     elif read.p < self.p0: return 1 # No gapped extention yet
     skip = read.p - self.p0
-    i = read.compLen() - 1
-    while i >= 0:
-      if skip < read.baseReps[i]: break
-      skip -= read.baseReps[i]
-      i -= 1
-    self.headAddBase(read.nrBases[i], read.baseReps[i] - skip)
-    i -= 1
-    while self.compLen() < elen and i >= 0:
-      self.headAddBase(read.nrBases[i], read.baseReps[i])
-      i -= 1
-    if self.p0 != read.basePos(i+1): # Warning: introns not considered!
-      sys.stderr.write('compRead.leftExtend: Position may be wrong!\n')
-      sys.stderr.write(str(self.p0) + ' != ' + str(read.basePos(i)) + "\n")
-      self.writeReads("self", sys.stderr)
-      read.writeReads("extend", sys.stderr)
+    for base, rep, gap in read.tailBaseIter():
+      if skip > 0:
+        if skip < gap: 
+          print("leftExtend: Reads not compatible!")
+          return 1
+        skip -= gap + rep
+        if skip < 0:
+          self.headAddBase(base, - skip)
+          #print base, -skip
+      else:
+        self.headAddBase(base, rep, gap)
+        #print base, rep, gap
+        if self.compLen() >= elen: return 0
+
+    #if self.p0 != read.basePos(i+1): # Warning: introns not considered!
+    #  sys.stderr.write('compRead.leftExtend: Position may be wrong!\n')
+    #  sys.stderr.write(str(self.p0) + ' != ' + str(read.basePos(i)) + "\n")
+    #  self.writeReads("self", sys.stderr)
+    #  read.writeReads("extend", sys.stderr)
     return 0
         
     

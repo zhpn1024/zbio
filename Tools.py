@@ -226,3 +226,15 @@ def bed2Seq(seq, bed):
       es = rc(es)
     s += es
   return s
+
+def gtf2Seq(seq, gtftrans):
+  s = ''
+  gtftrans.exons.sort()
+  if gtftrans.strand == '-':
+    gtftrans.exons.reverse()
+  for e in gtftrans.exons():
+    es = seq[e.start:e.stop]
+    if e.strand == '-':
+      es = rc(es)
+    s += es
+  return s
