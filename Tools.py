@@ -238,3 +238,38 @@ def gtf2Seq(seq, gtftrans):
       es = rc(es)
     s += es
   return s
+
+def cdna_pos(trans, p):
+  exons = trans.exons
+  exons.sort(reverse = trans.is_reverse())
+  if p < trans.start or p > trans.stop:
+    return None
+  #p1 = p - trans.start
+  pos = 0
+  for e in exons:
+    if e.start <= p <= e.stop:
+      if trans.is_reverse():
+        pos += e.stop - p
+      else:
+        pos += p - e.start
+      return pos
+    else:
+      pos += len(e)
+  return None
+
+def genome_pos(trans, p, bias = 0):
+  if p < 0 or p > trans.cdna_length():
+    return None
+  p1 = p
+  pos = trans.start
+  #l=range(len())
+  for e in trans.exons:
+    if len(e) - p1 >= bias:
+      if trans.is_reverse():
+        pos = e.stop - p1
+      else:
+        pos = p1 + e.start
+      return pos
+    else:
+      p1 -= len(e)
+  return None

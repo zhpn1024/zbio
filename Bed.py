@@ -58,11 +58,11 @@ class Bed3:
     return dict([(self.Header[i],self.items[i]) for i in range(self.n)])
   @property
   def end5(self): #5' end, all bed
-    if(self.strand!='-'): return self.start
+    if self.strand != '-' : return self.start
     else : return self.stop
   @property
   def end3(self): #3' end, all bed
-    if(self.strand!='-'): return self.stop
+    if self.strand != '-' : return self.stop
     else : return self.start
   def is_reverse(self): #All bed
     return self.strand=='-'
@@ -98,6 +98,7 @@ class Bed3:
     return (self.start+self.stop)/2.0
   def cdna_length(self): #Bed3 and Bed6
     return len(self)
+  @property
   def exons(self): #Bed3 and Bed6
     l=[]
     l.append(self(id=self.id+"_Exon_1"))
@@ -111,16 +112,14 @@ class Bed3:
   def is_sense(self,other): #In same strand? All bed
     return self.strand==other.strand
   def cdna_pos(self,p): #Bed3 and Bed6
-    if self.is_contain(p):
-      return abs(p-self.end5)
+    if self.is_contain(p): return abs(p-self.end5)
+    else: return None
 
 class Bed6(Bed3):
   Header=('chr','start','stop','id','score','strand')
   Format=(str,int,int,str,str,str)
   n=6
-  
   #def __init__(self,x):
-
   #def __str__(self):
 
   @property
@@ -210,10 +209,10 @@ class Bed12(Bed6):
     return Bed12(self)
   
   def cdna_length(self): #Bed12
-    len=0
+    l = 0
     for i in self.blockSizes:
-      len+=i
-    return len
+      l += i
+    return l
   
   def center(self): #Middle point, Bed12 only
     len=self.cdna_length()/2.0
@@ -222,7 +221,7 @@ class Bed12(Bed6):
       if len<0:
         break
     return self.start+self.blockStarts[i]+self.blockSizes[i]+len
-    
+  @property
   def exons(self): #Bed12
     a=[]
     if self.strand=="-":
@@ -241,7 +240,7 @@ class Bed12(Bed6):
       return a[::-1]
     else:
       return a
-  
+  @property
   def introns(self):
     a=[]
     if self.strand=="-":
@@ -261,7 +260,7 @@ class Bed12(Bed6):
     else:
       return a
   
-  def cdna_pos(self,p):
+  def cdna_pos(self, p):
     if p<self.start or p>self.stop:
       return None
     p1=p-self.start
@@ -281,9 +280,11 @@ class Bed12(Bed6):
     else:
       return None
   
-  def genome_pos(self,p,bias=0):
-    if p<0 or p>self.cdna_length():
-      return None
+  def genome_pos(self, p, bias=0):
+    m = self.cdna_length()
+    if p < 0 or p > m: return None
+    if p == 0 : return self.end5
+    if p == m: return self.end3
     p1=p
     pos=self.start
     l=range(self.blockCount)
