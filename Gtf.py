@@ -52,6 +52,7 @@ class gtfTrans(exon):
     self.start_codon = None
     self.stop_codon = None
     self.other = []
+    self.gene = self.attr['gene_id']
     #self.attr = self.pos.attr
   def addExon(self, e): 
     if e.type == 'exon': self.exons.append(e)
