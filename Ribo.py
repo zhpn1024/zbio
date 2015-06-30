@@ -112,16 +112,24 @@ class Region:
     p = float(len(self))/self.ers.length
     return Stat.binomTest(self.n, self.ers.total, p) / p
   
-  def getFrame(self, start, stop, expect = None):
-    f = [0] * self.ers.bin
-    for i in range(start, stop):
-      for j in range(self.ers.bin):
-        f[j] += self.ers.frames[i][j]
-    for j in range(3):
-      fall[j] /= len(self)
-    print "All:", fall
+  def getFrame(self, start, stop):
+    #fs = firstFrames(self.ers.cnts[start, stop], self.bin)
+    f = frameMean(self.ers.frames[start, stop])
+    return f
   
-  def frame(self):
+  def frameCheck(self, n = 500, window = 20):
+    f = self.getFrame(self.start, self.stop)
+    fm = max(f)
+    bias = None
+    start, stop = self.mapback(self.ers.nhead, self.ers.bin)
+    p = frameTestN(self.ers.cnts, start, stop, fm, self.crs.bin, n = n)
+    print "Region frame:", f
+    if p < 0.05 : 
+      for i in range(len(f)):
+        if f[i] == fm: bias = i
+      print "Bias:", i, "p =", p
+    if 
+    
     #l = len(fs)
     fall = [0,0,0]
     for i in range(self.start, self.stop):

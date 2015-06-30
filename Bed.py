@@ -404,4 +404,10 @@ def refFlatIter(file):
     bed = Bed12(lstb)
     yield bed
     
-    
+def shortBed(s, name = ''): #like chr1:1-200:+
+  lst = s.strip().split(":")
+  l1 = lst[1].split("-")
+  if name == "": name = s.strip()
+  if len(lst) >= 3: strand = lst[2]
+  else: stand = '.'
+  return Bed6([lst[0], l1[0], l1[1], name, 0, strand])

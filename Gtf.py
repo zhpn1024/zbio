@@ -78,6 +78,8 @@ class gtfTrans(exon):
   @property
   def cds_stop(self):
     return self.stop_codon.end3
+  def tid(self):
+    return self.id
   def cdna_length(self): 
     l = 0
     for e in self.exons:
@@ -138,6 +140,8 @@ class gtfGene(exon):
     for t in self.trans:
       s += '\n\t' + t.__repr__()
     return s
+  def gid(self):
+    return self.id
   def check(self):
     for t in self.trans:
       t.check()
