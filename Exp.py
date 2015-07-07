@@ -2,12 +2,22 @@ class Exp():
   def __init__(self, sample, exp): #sample and expression list
     self.sample = sample
     self.exp = exp
+    self.value = [] #sort index
   def __str__(self):
     return '\t'.join(map(str, self.exp))
   def __repr__(self):
-    return '\t'.join(map(str, self.sample)) + "\n" + str(self)
+    return self.headerline + "\n" + str(self)
   def __len__(self):
     return len(self.sample)
+  def __cmp__(self, other):
+    c = 0
+    for i in range(len(self.value)):
+      c = c or cmp(self.value[i], other.value[i])
+      if c != 0: break
+    return c
+  def headerline(self,sep='\t'):# Header string, fit all bed
+    sep=str(sep)
+    return sep.join(map(str, self.sample))
     
 class Trans(Exp):
   def __init__(self, tid, sample, exp):
@@ -20,6 +30,9 @@ class Trans(Exp):
   @property
   def tid(self):
     return self.id
+  def headerline(self,sep='\t'):# Header string, fit all bed
+    sep=str(sep)
+    return 'tid' + sep + sep.join(map(str, self.sample))
     
 class Gene(Exp):
   def __init__(self, gid, sample, exp):
@@ -44,6 +57,12 @@ class Gene(Exp):
     return self.id
   def addTrans(self, t):
     self.trans.append(t)
+  def headerline(self,sep='\t'):# Header string, fit all bed
+    sep=str(sep)
+    if len(self.trans) == 0:
+      return 'gid' + sep + sep.join(map(str, self.sample))
+    else:
+      return 'gid' + sep + 'tid' + sep + sep.join(map(str, self.sample))
   
 def subarr(lst, ids = [], head = 0):
   if len(ids) == 0:

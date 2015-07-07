@@ -108,9 +108,12 @@ class Region:
     start = self.start * bin + nhead
     stop = self.stop * bin + nhead
     return start, stop
-  def binomPval(self):
+  def binomPval(self, l = -1):
+    
     p = float(len(self))/self.ers.length
-    return Stat.binomTest(self.n, self.ers.total, p) / p
+    if l > 0: p2 = float(len(self))/l
+    else : p2 = p
+    return Stat.binomTest(self.n, self.ers.total, p) / p2
   
   def getFrame(self, start, stop):
     #fs = firstFrames(self.ers.cnts[start, stop], self.bin)
