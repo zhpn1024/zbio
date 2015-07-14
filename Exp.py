@@ -124,22 +124,3 @@ def gExpIter(expfile, gi = 0, sep = '\t', ei = [], sample = []):
     #t.gid = gid
     yield g
 
-class libGid():
-  def __init__(self, species = 'human', sep = '\t'):
-    self.t2g = {}
-    self.alias = {}
-    if species in ('human', 'hs', 'hg19', 'hg38'):
-      t2gfname = 'trans2gene_hg19.txt'
-      alifname = 'ali_human.txt'
-    t2gfile = open(t2gfname, 'r')
-    for l in t2gfile:
-      lst = l.strip().split(sep)
-      self.t2g[lst[0]] = lst[1]
-    alifile = open(alifname, 'r')
-    for l in alifile:
-      lst = l.strip().split(sep)
-      self.alias[lst[0]] = lst[1]
-  def checkGid(self, t):
-    return t.gid == self.t2g[t.id]
-  def isAli(self, gid):
-    return gid in self.alias
