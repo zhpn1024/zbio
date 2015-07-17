@@ -1,3 +1,4 @@
+import sys
 Gid = ['ID','GENEID','GI','GID','ENTREZ']
 Sym = ['SYM','SYMBOL','NAME']
 Ali = ['ALI','ALIAS','ALIASES','SYNONYM','SYNONYMS']
@@ -50,11 +51,15 @@ class GeneDict():
     self.symUp = {} #Upper case
     self.aliUp = {}
     lastsp = ''
+    neg = {}
     for l in ginfofile:
       if l[0] == '#' : continue
       g = Gene(l, sep)
       if lastsp != g.taxid and lastsp != '':
-        print "Warning: There may be more than one species in gene_info file!"
+        if g.taxid not in neg:
+          sys.stderr.write("Warning: There may be more than one species in gene_info file! Neglected: "+g.taxid+"\n")
+          neg[g.taxid] = 1
+        continue
       lastsp = g.taxid
       self.gid[g.gid] = g
       self.sym[g.sym] = g
@@ -78,15 +83,18 @@ class GeneDict():
       au = a.upper()
       if au in Gid:
         g = self.byGid(attr[a])
-        if g != None: return g
+        if g != None : return g
       elif au in Ens:
         g = self.byEns(attr[a])
-        if g != None: return g
+        if g != None : return g
       else: 
         namelist.append(attr[a])
     for n in namelist:
         g = self.bySym(n)
-        if g == None: continue
+        if g == None : 
+          if self.symRectify and n in self.SymErr:
+            g = self.bySym(self.SymErr[n])
+          if g == None : continue
         if g.gid not in gids: gids[g.gid] = 0
         gids[g.gid] += 1
     if len(gids) == 0 : return None
@@ -100,6 +108,8 @@ class GeneDict():
     su = sym.upper()
     if su in self.symUp: return self.symUp[su]
     if su in self.aliUp: return self.aliUp[su]
+    if su[0:3] == 'LOC' and su[3:] in self.gid:
+      return self.gid[su[3:]]
     return None
   def byGid(self, gid):
     gid = str(gid)
@@ -109,5 +119,25 @@ class GeneDict():
     ens = str(ens)
     if ens in self.ens: return self.ens[ens]
     return None
-  def isAli(self, gid):
-    return gid in self.alias
+  symRectify = True
+  SymErr = {'MT-ATP6':'MTATP6','MT-CYB':'MTCYB','MT-ND4':'MTND4','MT-CO2':'MTCO2','MT-CO3':'MTCO3',
+            '1-Sep':'SEPT1','2-Sep':'SEPT2','3-Sep':'SEPT3','4-Sep':'SEPT4','5-Sep':'SEPT5','6-Sep':'SEPT6','7-Sep':'SEPT7',
+            '8-Sep':'SEPT8','9-Sep':'SEPT9','10-Sep':'SEPT10','11-Sep':'SEPT11','12-Sep':'SEPT12','14-Sep':'SEPT14','15-Sep':'SEP15',
+            '1-Mar':'MARCH1','2-Mar':'MARCH2','3-Mar':'MARCH3','4-Mar':'MARCH4','5-Mar':'MARCH5','6-Mar':'MARCH6','7-Mar':'MARCH7',
+            '8-Mar':'MARCH8','9-Mar':'MARCH9','10-Mar':'MARCH10','11-Mar':'MARCH11','1-Feb':'FEB1','2-Feb':'FEB2','3-Feb':'FEB3',
+            '4-Feb':'FEB4','6-Feb':'FEB6','5-Feb':'FEB5','7-Feb':'FEB7','9-Feb':'FEB9','10-Feb':'FEB10','11-Feb':'FEB11',
+            '1-Apr':'APR-1','2-Apr':'APR-2','3-Apr':'APR-3','1-May':'MAY1','1-Oct':'OCT1','2-Oct':'OCT2','3-Oct':'OCT3',
+            '4-Oct':'OCT4','6-Oct':'OCT6','1-Nov':'NOV1','2-Nov':'NOV2','1-Dec':'DEC1','2-Dec':'DEC2',
+            '41153':'SEPT1','41154':'SEPT2','41155':'SEPT3','41156':'SEPT4','41157':'SEPT5','41158':'SEPT6','41159':'SEPT7',
+            '41160':'SEPT8','41161':'SEPT9','41162':'SEPT10','41163':'SEPT11','41164':'SEPT12','41166':'SEPT14','41167':'SEP15',
+            '40969':'MARCH1','40970':'MARCH2','40971':'MARCH3','40972':'MARCH4','40973':'MARCH5','40974':'MARCH6','40975':'MARCH7',
+            '40976':'MARCH8','40977':'MARCH9','40978':'MARCH10','40979':'MARCH11','42248':'SEPT1','42249':'SEPT2','42250':'SEPT3',
+            '42251':'SEPT4','42252':'SEPT5','42253':'SEPT6','42254':'SEPT7','42255':'SEPT8','42256':'SEPT9','42257':'SEPT10',
+            '42258':'SEPT11','42259':'SEPT12','42261':'SEPT14','42262':'SEP15','42064':'MARCH1','42065':'MARCH2','42066':'MARCH3',
+            '42067':'MARCH4','42068':'MARCH5','42069':'MARCH6','42070':'MARCH7','42071':'MARCH8','42072':'MARCH9','42073':'MARCH10',
+            '42074':'MARCH11','42036':'FEB1','42037':'FEB2','42038':'FEB3','42039':'FEB4','42041':'FEB6','42040':'FEB5',
+            '42042':'FEB7','42044':'FEB9','42045':'FEB10','42046':'FEB11','42095':'APR-1','42096':'APR-2','42097':'APR-3',
+            '42125':'MAY1','42278':'OCT1','42279':'OCT2','42280':'OCT3','42281':'OCT4','42283':'OCT6','42309':'NOV1','42310':'NOV2',
+            '42339':'DEC1','42340':'DEC2'
+
+           }
