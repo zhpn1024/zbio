@@ -120,7 +120,8 @@ class GeneDict():
     if ens in self.ens: return self.ens[ens]
     return None
   symRectify = True
-  SymErr = {'MT-ATP6':'MTATP6','MT-CYB':'MTCYB','MT-ND4':'MTND4','MT-CO2':'MTCO2','MT-CO3':'MTCO3',
+  SymErr = {'MT-ATP6':'MTATP6','MT-CYB':'MTCYB','MT-ND4':'MTND4','MT-CO2':'MTCO2','MT-CO3':'MTCO3','MT-ND3':'MTND3','MT-ND5':'MTND5',
+            'PERPL':'PERP','MT-ATP8':'MTATP8','MT-ND1':'MTND1','MT-CO1':'MTCO1','MT-ND2':'MTND2',
             '1-Sep':'SEPT1','2-Sep':'SEPT2','3-Sep':'SEPT3','4-Sep':'SEPT4','5-Sep':'SEPT5','6-Sep':'SEPT6','7-Sep':'SEPT7',
             '8-Sep':'SEPT8','9-Sep':'SEPT9','10-Sep':'SEPT10','11-Sep':'SEPT11','12-Sep':'SEPT12','14-Sep':'SEPT14','15-Sep':'SEP15',
             '1-Mar':'MARCH1','2-Mar':'MARCH2','3-Mar':'MARCH3','4-Mar':'MARCH4','5-Mar':'MARCH5','6-Mar':'MARCH6','7-Mar':'MARCH7',

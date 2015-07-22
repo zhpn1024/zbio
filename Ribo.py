@@ -14,6 +14,7 @@ def first(arr):
   l = len(arr)
   m = max(arr)
   f = [0] * l
+  if m <= 0 : return f
   c = 0
   for i in range(l):
     if arr[i] == m: 
@@ -23,30 +24,37 @@ def first(arr):
   for i in range(l):
     f[i] /= c
   return f
-def firstFrames(arr, bin):
+def firstFrames(arr, bin = 3):
   fs = []
   for i in range(0, len(arr), bin):
-    fs.append(first(arr[i:i+bin]))
+    fs.append(first(arr[i:i+bin])) # May out of index
   return fs
 def frameMean(fs):
   l = len(fs[0])
   f = [0] * l
+  c = 0
   for i in range(len(fs)):
     for j in range(l):
       f[j] += fs[i][j]
-  for j in range(l):
-    f[j] /= len(fs)
+      #if sum(fs[i]) > 0 : c += 1
+    c += sum(fs[i])
+    #print fs[i],c
+  if c > 0 : 
+    for j in range(l): f[j] /= c
   return f
-def frameTestN(arr, start, stop, value, bin, n = 500): #expect no bias
-  a = arr[0:len(arr)]
+def frameTestN(arr, length, value, bin = 3, n = 1000, show = False): #expect no bias
+  a = arr[:]
   c = 0
   for i in range(n):
     random.shuffle(a)
-    fs = firstFrames(a[start:stop], bin)
+    fs = firstFrames(a[0:length], bin)
     f = frameMean(fs)
-    if value <= max(f): c += 1
+    if max(f) >= value: c += 1
+    if show : print a, fs, f, c
+    if i == 9 and c > 5 : return float(c) / 10
+    if i == 99 and c > 15 : return float(c) / 100
   return float(c) / n
-def frameTestE(arr, start, stop, value, bin, expect, n = 500):
+def frameTestE(arr, length, value, expect, bin = 3, n = 1000, show = False):
   a = arr[0:len(arr)]
   c = 0
   af = []
@@ -59,16 +67,22 @@ def frameTestE(arr, start, stop, value, bin, expect, n = 500):
     for j in range(bin):
       random.shuffle(af[j])
     fs = []
-    for i in range(len(af[0])):
+    for i in range(length/bin):
       ff = []
       for j in range(bin):
         ff.append(af[j][i])
       fs.append(first(ff))
     f = frameMean(fs)
     m = max(f)
-    if f[expect] < m and value <= m : c += 1
+    if f[expect] < m and m >= value : c += 1
+    if show : print fs, f, c
+    if i == 9 and c > 5 : return float(c) / 10
+    if i == 99 and c >15 : return float(c) / 100 ###
   return float(c) / n
-  
+def bias(f):
+  m = max(f)
+  for i in range(len(f)):
+    if f[i] == m : return i
   
 def orfRead(cnts, cds1, cds2, nhead = 12, ntail = 18):
   all1 = nhead
@@ -86,7 +100,7 @@ def orfRead(cnts, cds1, cds2, nhead = 12, ntail = 18):
 class Region:
   def __init__(self, ers, start, stop, n, score = -1, p = 1):
     self.ers = ers # corrent enrichedRegions object
-    self.start = start
+    self.start = start #binned 
     self.stop = stop
     self.n = n
     self.score = score
@@ -99,84 +113,95 @@ class Region:
   def __len__(self): 
     return self.stop - self.start
   def copy(self):
-    return Region(self.start, self.stop, self.n, self.score, self.p)
+    return Region(self.ers, self.start, self.stop, self.n, self.score, self.p)
   def __str__(self):
-    return "%d-%d %d %s %s" % (self.start, self.stop, self.n, str(self.score), str(self.p))
+    return "%d-%d n=%d score=%s p=%s" % (self.start, self.stop, self.n, str(self.score), str(self.p))
   def __repr__(self):
     return "Enriched Region object " + str(self)
-  def mapback(self, nhead = 12, bin = 3):
-    start = self.start * bin + nhead
-    stop = self.stop * bin + nhead
+  def mapback(self, start = -1, stop = -1, nhead = -1, bin = -1):
+    if nhead < 0 : nhead = self.ers.nhead
+    if bin < 0 : bin = self.ers.bin
+    if start < 0 : start = self.start 
+    if stop < 0 : stop = self.stop
+    start = start * bin + nhead
+    stop = stop * bin + nhead
     return start, stop
   def binomPval(self, l = -1):
-    
     p = float(len(self))/self.ers.length
     if l > 0: p2 = float(len(self))/l
     else : p2 = p
     return Stat.binomTest(self.n, self.ers.total, p) / p2
   
-  def getFrame(self, start, stop):
-    #fs = firstFrames(self.ers.cnts[start, stop], self.bin)
-    f = frameMean(self.ers.frames[start, stop])
+  def getFrame(self, start = -1, stop = -1):
+    if start < 0 : start = self.start 
+    if stop < 0 : stop = self.stop
+    f = frameMean(self.ers.frames[start:stop])
     return f
+  def localPos(self, r, window = 20):
+    l = len(self)
+    rs = int(r * l - window / 2)
+    re = rs + window
+    if rs < 0 :
+      re -= rs
+      rs = 0
+    if re >= l:
+      rs -= re - l
+      re = l
+    rs += self.start
+    re += self.start
+    return (rs, re)
   
-  def frameCheck(self, n = 500, window = 20):
+  def frameCheck(self, n = 1000, window = 20, local = [0.0,0.5,1.0]):
     f = self.getFrame(self.start, self.stop)
     fm = max(f)
-    bias = None
-    start, stop = self.mapback(self.ers.nhead, self.ers.bin)
-    p = frameTestN(self.ers.cnts, start, stop, fm, self.crs.bin, n = n)
-    print "Region frame:", f
+    tstart, tstop = self.mapback()
+    p = frameTestN(self.ers.cnts[tstart:tstop], tstop-tstart, fm, self.ers.bin, n = n)
+    #print "Region frame:",
     if p < 0.05 : 
-      for i in range(len(f)):
-        if f[i] == fm: bias = i
-      print "Bias:", i, "p =", p
-    if 
-    
-    #l = len(fs)
-    fall = [0,0,0]
-    for i in range(self.start, self.stop):
-      for j in range(3):
-        fall[j] += self.ers.fs[i][j]
-    for j in range(3):
-      fall[j] /= len(self)
-    print "All:", fall
-    if len(self) <= 20: return 
-    fall = [0,0,0]
-    for i in range(self.start, self.start+20):
-      for j in range(3):
-        fall[j] += self.ers.fs[i][j]
-    for j in range(3):
-      fall[j] /= 20
-    print "Head 20:", fall
-    fall = [0,0,0]
-    for i in range((self.start+self.stop)/2-10,(self.start+self.stop)/2+10):
-      for j in range(3):
-        fall[j] += self.ers.fs[i][j]
-    for j in range(3):
-      fall[j] /= 20
-    print "Middle 20:", fall
-    fall = [0,0,0]
-    for i in range(self.stop-20, self.stop):
-      for j in range(3):
-        fall[j] += self.ers.fs[i][j]
-    for j in range(3):
-      fall[j] /= 20
-    print "Tail 20:", fall
-      
+      b = bias(f)
+      #print "Bias =", b, "p =", p, "f =", f
+    #else: print "No significant Bias, p =", p, "f =", f
+    regbias = (f, p)
+    locbias = {}
+    l = len(self)
+    if l > window :
+      for r in local:
+        (rs, re) = self.localPos(r, window)
+        (ts, te) = self.mapback(rs, re)
+        rf = self.getFrame(rs, re)
+        rfm = max(rf)
+        rb = bias(rf)
+        if p < 0.05 : 
+          if round(rfm, 3) == round(rf[b], 3) : continue
+          rpn = frameTestN(self.ers.cnts[ts:te], te-ts, rfm, self.ers.bin, n = n)
+          if rpn < 0.05 :
+            rpe = frameTestE(self.ers.cnts[tstart:tstop], te-ts, rfm, b, self.ers.bin, n = n)
+          else : rpe = 1
+          rp = max(rpn, rpe)
+          if rp < 0.05 : tp = '1-1'
+          else : tp = '1-0'
+        else: 
+          rp = frameTestN(self.ers.cnts[ts:te], te-ts, rfm, self.ers.bin, n = n)
+          if rp < 0.05 : tp = '0-1'
+          else : tp = '0-0'
+        if rp < 0.05 : 
+          #print "Local bias: r =", r, ", rBias =", rb, ", rp =", rp, ", rf =", rf
+          locbias[r] = (rf, rp)
+    return (regbias, locbias)
+
 class enrichedRegions:
-  def __init__(cnts, nhead = 12, ntail = 18, bin = 3, log = True):
+  def __init__(self, cnts, nhead = 12, ntail = 18, bin = 3, log = True):
     self.cnts = cnts
     self.nhead = nhead
     self.ntail = ntail
     self.bin = bin
-    length = len(cnts) - nhead - ntail
-    if length < bin * 2: 
-      print "Cdna too short!"
-      return 
     self.bins = []
     self.frames = []
     self.total = 0
+    length = len(cnts) - nhead - ntail
+    if length < bin * 2: 
+      #print "Transcript too short!"
+      return 
     for i in range(nhead, len(cnts)-ntail, bin):
       try: 
         if log: s = sum(map(intlog2, cnts[i:i+bin]))
@@ -186,7 +211,7 @@ class enrichedRegions:
       self.bins.append(s)
       self.frames.append(first(cnts[i:i+bin]))
     if self.total == 0 : 
-      print "No reads!"
+      #print "No reads!"
       return 
     self.length = len(self.bins)
     self.mean = float(self.total) / self.length
@@ -206,8 +231,10 @@ class enrichedRegions:
     return pos * self.bin + self.nhead
   
   def findRegion(self):
+    if self.total == 0 : raise StopIteration
     rarr = []
     rmax = Region(self, 0, 1, 0, 0)
+    #print self.rStarts, self.rStops
     for bi1 in self.rStarts:
       s = 0
       rarr.append([])
@@ -217,15 +244,12 @@ class enrichedRegions:
         for bi in range(lasti2, bi2):
           s += self.bins[bi]
         d = bi2 - bi1
-      score = float(s) / self.total - float(d) / self.length
-      r = Region(self, bi1, bi2, s, score)
-      if score > 0 : r.p = r.binomPval(self.length, self.total)
-      #print (s, total), (bi1,bi2, len(bs)), score, r.p
-      rarr[-1].append(r)
-      if rmax < r : rmax = r
-      lasti2 = bi2
-  #smax = rmax.score
-  #rout = []
+        score = float(s) / self.total - float(d) / self.length
+        r = Region(self, bi1, bi2, s, score)
+        if score > 0 : r.p = r.binomPval()
+        rarr[-1].append(r)
+        if rmax < r : rmax = r
+        lasti2 = bi2
     while rmax.p < 0.05:# rmax.score > smax * 0.5: # and pvalue < XXX
     #rout.append(rmax.copy())
       yield rmax.copy() ####
@@ -238,79 +262,3 @@ class enrichedRegions:
       for rarr2 in rarr:
         for r in rarr2:
           if rmax < r : rmax = r
-
-    
-def enrichedRegion1(cnts, nhead = 12, ntail = 18, bin = 3, log = True):
-  length = len(cnts) - nhead - ntail
-  if length < bin * 2: 
-    print "Cdna too short!"
-    return None
-  bs = []
-  fs = []
-  total = 0
-  for i in range(nhead, len(cnts)-ntail, bin):
-    try: 
-      if log: s = sum(map(intlog2, cnts[i:i+bin]))
-      else: s = sum(cnts[i:i+bin])
-    except: break
-    #a = float(s) / bin
-    #if log: s = intlog2(s) ###
-    total += s
-    bs.append(s)
-    fs.append(first(cnts[i:i+bin]))
-  if total == 0 : 
-    print "No reads!"
-    return None
-  mean = float(total) / len(bs)
-  r1s = [0]
-  r2s = []
-  for bi in range(1,len(bs)):
-    if bs[bi-1] <= mean and bs[bi] >= mean:
-      r1s.append(bi)
-    if bs[bi-1] >= mean and bs[bi] <= mean:
-      r2s.append(bi)
-  r2s.append(len(bs))
-  print "Number of split sites: ", len(r1s), len(r2s)
-  #curve = {}
-  rarr = []
-  rmax = Region(0, 1, 0, 0)
-  for bi1 in r1s:
-    s = 0
-    rarr.append([])
-    lasti2 = bi1
-    for bi2 in r2s:
-      if bi2 <= bi1: continue
-      for bi in range(lasti2, bi2):
-        s += bs[bi]
-      d = bi2 - bi1
-      score = float(s) / total - float(d) / len(bs)
-      r = Region(bi1, bi2, s, score)
-      r.p = r.binomPval(len(bs), total)
-      #print (s, total), (bi1,bi2, len(bs)), score, r.p
-      rarr[-1].append(r)
-      if rmax < r : rmax = r
-      elif rmax == r and len(rmax) < len(r): rmax = r
-      #if rmax.p > r.p : rmax = r
-      #elif rmax.p == r.p and len(rmax) < len(r): rmax = r
-      #if d not in curve or curve[d] < s : curve[d] = s
-      lasti2 = bi2
-  smax = rmax.score
-  rout = []
-  while rmax.p < 0.05:# rmax.score > smax * 0.5: # and pvalue < XXX
-    rout.append(rmax.copy())
-    for rarr2 in rarr:
-      for r in rarr2:
-        if rmax.overlap(r): 
-          r.score = -1
-          r.p = 1
-    rmax = Region(0, 1, 0, 0)
-    for rarr2 in rarr:
-      for r in rarr2:
-        if rmax < r : rmax = r
-        elif rmax == r and len(rmax) < len(r): rmax = r
-  for r in rout:
-    print r
-    mb = r.mapback()
-    print "DNA pos:", mb, "Genome pos:", (t.genome_pos(mb[0]), t.genome_pos(mb[1]))
-    r.frame(fs)
-  

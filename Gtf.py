@@ -28,6 +28,8 @@ class exon:
   def end3(self): #3' end, all bed
     if self.strand != '-' : return self.stop
     else : return self.start
+  def shortStr(self):
+    return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
 		
 def attr(s):
 	l = s.strip(';').split('; ')
