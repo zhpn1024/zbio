@@ -51,8 +51,8 @@ def frameTestN(arr, length, value, bin = 3, n = 1000, show = False): #expect no 
     f = frameMean(fs)
     if max(f) >= value: c += 1
     if show : print a, fs, f, c
-    if i == 9 and c > 5 : return float(c) / 10
-    if i == 99 and c > 15 : return float(c) / 100
+    if i == 19 and c > 10 : return float(c) / 20
+    if i == 99 and c > 20 : return float(c) / 100
   return float(c) / n
 def frameTestE(arr, length, value, expect, bin = 3, n = 1000, show = False):
   a = arr[0:len(arr)]
@@ -76,8 +76,8 @@ def frameTestE(arr, length, value, expect, bin = 3, n = 1000, show = False):
     m = max(f)
     if f[expect] < m and m >= value : c += 1
     if show : print fs, f, c
-    if i == 9 and c > 5 : return float(c) / 10
-    if i == 99 and c >15 : return float(c) / 100 ###
+    if i == 19 and c > 10 : return float(c) / 20
+    if i == 99 and c > 20 : return float(c) / 100 ###
   return float(c) / n
 def bias(f):
   m = max(f)

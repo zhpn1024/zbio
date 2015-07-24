@@ -1,5 +1,6 @@
 
 import pysam
+import Bed
 
 class Bamfile(pysam.Samfile):
   def __repr__(self):
@@ -115,20 +116,61 @@ class Bam():#AlignedRead
       elif ctype in [2,3]:
         pos += l
     return None
+  @property
+  def introns(self):
+    s = []
+    p = 0
+    pos = self.start
+    i = 1
+    for ctype, l in self.cigar:
+      if ctype in [0,7,8]:
+        pos += l
+        p += l
+      elif ctype in [1,4]:
+        p += l
+      elif ctype in [2]:
+        pos += l
+      elif ctype in [3]:
+        b = Bed.Bed6([self.chr,pos,pos + l,self.id+"_intron"+str(i),p,self.strand])
+        s.append(b)
+        pos += l
+        i += 1
+    if self.is_reverse():
+      return s[::-1]
+    return s
+  def compatible(self, trans = None, introns = [], mis = 0): # Bases of the read not in the right place
+    #if trans != None : exons = trans.exons
+    if trans is not None : introns = trans.introns
+    m = 0
+    ris = self.introns
+    if len(ris) == 0 : 
+      for intr in introns:
+        o = self.read.get_overlap(intr.start, intr.stop)
+        if o > 0 : m += o
+        if m > mis : return False
+    else :
+      for i in range(len(introns)):
+        if not ris[0].is_upstream(introns[i]) : break
+      c = True
+      for ri in ris:
+        if ri != introns[i] : 
+          c = False
+          p = int(ri.score)
+          m += min(p, self.cdna_length() - p)
+          if m > mis : return False
+        i += 1
+    return True
     
 def compatibleBamIter(bamfile, trans, mis = 0, sense = True):
-  rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop, multiple_iterators=False)
-  exons = trans.exons
+  if trans.chr not in bamfile.references : raise StopIteration
+  rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
+  introns = trans.introns
   for r in rds:
     read = Bam(r, bamfile)
     if sense and read.strand != trans.strand:
       #print read.id + " not sense"
       continue
-    b = 0
-    for e in exons:
-      b += read.read.get_overlap(e.start, e.stop)
-      #print b
-    if read.cdna_length() - b <= mis:
+    if read.compatible(introns = introns, mis = mis) :
       yield read
     #else:
       #print read.id, b, read.cdna_length()

@@ -30,17 +30,18 @@ class exon:
     else : return self.start
   def shortStr(self):
     return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
-		
+    
 def attr(s):
-	l = s.strip(';').split('; ')
-	a = {}
-	#print l
-	for att in l:
-		l2 = att.split(' ')
-		#print att, l2
-		a[l2[0]] = eval(l2[1])
-	return a
-	
+  if type(s) == dict: return s
+  l = s.strip(';').split('; ')
+  a = {}
+  #print l
+  for att in l:
+    l2 = att.split(' ')
+    #print att, l2
+    a[l2[0]] = eval(l2[1])
+  return a
+  
 class gtfTrans(exon):
   def __init__(self, lst): 
     exon.__init__(self, lst)
@@ -87,7 +88,17 @@ class gtfTrans(exon):
     for e in self.exons:
       l += len(e)
     return l
-  
+  @property
+  def introns(self):
+    introns = []
+    last = -1
+    for e in self.exons:
+      if last >= 0 : 
+        lst = [last, e.end5]
+        lst.sort()
+        introns.append(exon([self.chr,'','intron',lst[0]+1,lst[1],'',self.strand,'',self.attr]))
+      last = e.end3
+    return introns
   def cdna_pos(self, p):
     #self.check()
     if p < self.start or p > self.stop:

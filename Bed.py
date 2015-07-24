@@ -159,6 +159,10 @@ class Bed6(Bed3):
       if start<0: start=0
     return Bed6([self.chr,start,stop,self.id+'_Tail_'+str(n),self.score,self.strand])
   
+  def is_upstream(self, other): #other is upstream of self
+    if self.strand == '-' : return other.start >= self.stop
+    else : return other.stop <= self.start
+  
 
 def comTotup(s): #comma string to tuple
   if type(s)==tuple: return s
