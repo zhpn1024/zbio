@@ -21,6 +21,12 @@ class exon:
   def is_reverse(self): 
     return self.strand=='-'
   @property
+  def gid(self):
+    return self.attr['gene_id']
+  @property
+  def tid(self):
+    return self.attr['transcript_id']
+  @property
   def end5(self): #5' end, all bed
     if self.strand != '-' : return self.start
     else : return self.stop
@@ -55,7 +61,7 @@ class gtfTrans(exon):
     self.start_codon = None
     self.stop_codon = None
     self.other = []
-    self.gene = self.attr['gene_id']
+    #self.gene = self.attr['gene_id']
     #self.attr = self.pos.attr
   def addExon(self, e): 
     if e.type == 'exon': self.exons.append(e)
@@ -81,8 +87,6 @@ class gtfTrans(exon):
   @property
   def cds_stop(self):
     return self.stop_codon.end3
-  def tid(self):
-    return self.id
   def cdna_length(self): 
     l = 0
     for e in self.exons:
@@ -153,8 +157,6 @@ class gtfGene(exon):
     for t in self.trans:
       s += '\n\t' + t.__repr__()
     return s
-  def gid(self):
-    return self.id
   def check(self):
     for t in self.trans:
       t.check()
@@ -195,6 +197,44 @@ def loadGtf(fin, filt = []):
         genes[t.attr['gene_id']].addTrans(t)
         trans[t.id] = t
       trans[e.attr['transcript_id']].addExon(e)
+  return genes, trans
+
+def fetchGtf(fin, gid = '', tid = ''):
+  genes = {}
+  trans = {}
+  if gid == '' and tid == '' : return genes, trans
+  for l in fin:
+    if l[0] == '#' : continue
+    lst=l.strip().split('\t')
+    e = exon(lst)
+    if e.tid != tid  and e.gid != gid : continue
+    if e.gid == '' : continue
+    if lst[2] == 'gene':
+      g = gtfGene(lst)
+      if g.id == gid : genes[g.id] = g
+      #print g.id
+    elif lst[2] == 'transcript':
+      t = gtfTrans(lst)
+      if t.id != tid  and t.gid != gid : continue 
+      #g.add_trans(t)
+      if t.gid not in genes:
+        g = gtfGene(lst)
+        genes[g.id] = g
+        #continue ##
+      genes[t.gid].addTrans(t)
+      trans[t.id] = t
+      #print t.id
+    else:
+      if e.gid not in genes:
+        g = gtfGene(lst)
+        genes[g.id] = g
+        #continue
+      #print e.attr['exon_number']
+      if e.tid not in trans:
+        t = gtfTrans(lst)
+        genes[t.gid].addTrans(t)
+        trans[t.id] = t
+      trans[e.tid].addExon(e)
   return genes, trans
 
 def gtfGeneIter(fin, filt = []):

@@ -138,7 +138,23 @@ class Bam():#AlignedRead
     if self.is_reverse():
       return s[::-1]
     return s
-  def compatible(self, trans = None, introns = [], mis = 0): # Bases of the read not in the right place
+  def is_compatible(self, trans, mis = 0):
+    m = 0
+    last = -1
+    for i in range(self.cdna_length()):
+      pos = self.genome_pos(i, bias = 1)
+      i2 = trans.cdna_pos(pos)
+      if i2 is None : m += 1
+      else :
+        if last >= 0 :
+          if i2 != last + 1 :
+            m += min(i, self.cdna_length() - i, abs(i2 - last + 1))
+        last = i2
+      if m > mis : return False
+    #print self, self.cigar, m
+    if m > mis : return False
+    else : return True
+  def is_compatible0(self, trans = None, introns = [], mis = 0): # Bases of the read not in the right place
     #if trans != None : exons = trans.exons
     if trans is not None : introns = trans.introns
     m = 0
@@ -155,8 +171,9 @@ class Bam():#AlignedRead
       for ri in ris:
         if ri != introns[i] : 
           c = False
+          o = self.read.get_overlap(introns[i].start, introns[i].stop)
           p = int(ri.score)
-          m += min(p, self.cdna_length() - p)
+          m += max(o, min(p, self.cdna_length() - p))
           if m > mis : return False
         i += 1
     return True
@@ -164,13 +181,16 @@ class Bam():#AlignedRead
 def compatibleBamIter(bamfile, trans, mis = 0, sense = True):
   if trans.chr not in bamfile.references : raise StopIteration
   rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
-  introns = trans.introns
+  #introns = trans.introns
   for r in rds:
     read = Bam(r, bamfile)
     if sense and read.strand != trans.strand:
       #print read.id + " not sense"
       continue
-    if read.compatible(introns = introns, mis = mis) :
+    o = read.read.get_overlap(trans.start, trans.stop)
+    if o < read.cdna_length() - mis: 
+      continue
+    if read.is_compatible(trans = trans, mis = mis) :
       yield read
     #else:
       #print read.id, b, read.cdna_length()
