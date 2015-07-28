@@ -1,4 +1,4 @@
-
+import math
 def hypergeo0(N, K, n, k):
   p = 1.0
   nk = n - k
@@ -45,7 +45,7 @@ def hypergeo(N, K, n, k):
   if k >= n / 2 : return hypergeo0(N, K, n, k)
   else: return hypergeo1(N, K, n, k)
   
-def binomial(k, n, p = 0.5):
+def binomial(k, n, p = 0.5, show=False):
   if k > n or k < 0: return 0
   if p < 0 : p = 0
   if p > 1 : p = 1
@@ -69,9 +69,70 @@ def binomial(k, n, p = 0.5):
       pi *= q
       qi += 1
     pr *= pi
+    if show: print pr
   return pr
-def binomTest(k, n, p = 0.5, alt = "g"): # No two sided yet!
+def binomLog(k, n, p = 0.5, logarr = [], show = False): #log probability value
+  if n < 0 : return None
+  if k > n or k < 0: return None #None is log(0)
+  if p < 0 : p = 0
+  if p > 1 : p = 1
+  if k * 2 > n:
+    k = n - k
+    p = 1 - p
+  q = 1 - p
+  if p == 0 :
+    if k == 0 : return 0
+    else : return None
+  elif q == 0 : return None
+  lpr = 0.0
+  lp = math.log10(p)
+  lq = math.log10(q)
+  nk = n - k
+  #if k == 0 : return  lq * n
+  lpr += lp * k + lq * nk
+  if len(logarr) >= n + 1 : arr = False
+  else : arr = True
+    #logarr = [None] * (n + 1)
+    #for i in range(1, n + 1):
+      #logarr[i] = math.log10(i)
+  for i in range(k):
+    if arr : lpr += logarr[n - i] - logarr[k - i]
+    else : lpr += math.log10(n - i) - math.log10(k - i)
+  return lpr
+def binomTest(k, n, p = 0.5, alt = "g", log = True, show=False): # No two sided yet!
+  if not log : return binomTest0(k, n, p, alt, show) # if log, p are calculated with log10 values
+  logarr = [None] * (n + 1)
+  for i in range(1, n + 1):
+    logarr[i] = math.log10(i)
+  lpk = binomLog(k, n, p, logarr)
+  if show : print lpk
+  if lpk is None : 
+    if alt[0] == 'g' and p >= 1: return 1
+    if alt[0] != 'g' and p <= 0: return 1
+    return 0
+  elif lpk == 0 : return 1
+  #if k == 0 and alt[0] == 'g' : return 1
+  #if k == n and alt[0] != 'g' : return 1
+  pv = 10 ** lpk ### log10 reverse
+  q = 1 - p
+  lp = math.log10(p)
+  lq = math.log10(q)
+  if alt[0] == 'g':
+    for i in range(k, n):
+      lpk += lp + logarr[n - i] - lq - logarr[i + 1]
+      #r = p * (n - i) / q / (i + 1)
+      #pk *= r
+      pv += 10 ** lpk
+  else:
+    for i in range(k, 0, -1):
+      lpk += lq + logarr[i] - lp - logarr[n - i + 1]
+      #r = q * i / p / (n - i + 1)
+      #pk *= r
+      pv += 10 ** lpk
+  return pv
+def binomTest0(k, n, p = 0.5, alt = "g", show=False): # No two sided yet!
   pk = binomial(k, n, p)
+  if show : print pk
   if pk == 1 : return 1
   if pk == 0 : 
     if alt[0] == 'g' and p >= 1: return 1
@@ -81,7 +142,7 @@ def binomTest(k, n, p = 0.5, alt = "g"): # No two sided yet!
   #if k == n and alt[0] != 'g' : return 1
   pv = pk
   q = 1 - p
-  if alt[0] == 'g':
+  if alt[0] == 'g': 
     for i in range(k, n):
       #r = 1.0
       r = p * (n - i) / q / (i + 1)
@@ -93,4 +154,3 @@ def binomTest(k, n, p = 0.5, alt = "g"): # No two sided yet!
       pk *= r
       pv += pk
   return pv
-    
