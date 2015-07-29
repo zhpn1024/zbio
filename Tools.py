@@ -240,7 +240,7 @@ def findOverlap(q, lst, func=overlap, ignoreStrand = True): # List should have n
 
 def bed2Seq(seq, bed):
   s = ''
-  for e in bed.exons():
+  for e in bed.exons:
     es = seq[e.start:e.stop]
     if e.strand == '-':
       es = rc(es)
@@ -249,10 +249,10 @@ def bed2Seq(seq, bed):
 
 def gtf2Seq(seq, gtftrans):
   s = ''
-  gtftrans.exons.sort()
-  if gtftrans.strand == '-':
-    gtftrans.exons.reverse()
-  for e in gtftrans.exons():
+  #gtftrans.exons.sort()
+  #if gtftrans.strand == '-':
+    #gtftrans.exons.reverse()
+  for e in gtftrans.exons:
     es = seq[e.start:e.stop]
     if e.strand == '-':
       es = rc(es)
