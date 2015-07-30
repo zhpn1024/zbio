@@ -34,7 +34,25 @@ class Orf:
     return len(self.starts) > 0
   def is_complete(self):
     return self.has_start() and self.has_stop()
-    
+  def orfByRibo(self, frame, start, stop, srange = 4):
+    if self.frame != frame: return None
+    if self.stop < start: return None
+    if min(self.starts + self.altstarts) > stop : return None
+    dmin = srange * codonSize
+    sm = -1
+    for s in self.starts :
+      d = abs(s - start)
+      if d < dm :
+        dm = d
+        sm = s
+    if sm > 0 : return (s, self.stop)
+    for s in self.altstarts :
+      d = abs(s - start)
+      if d < dm :
+        dm = d
+        sm = s
+    if sm > 0 : return (s, self.stop)
+    return None
 
 def allORF(seq, strand = '+') :
   seq = seq.upper().replace('U','T')
