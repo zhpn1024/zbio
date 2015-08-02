@@ -14,8 +14,11 @@ class Orf:
     if len(lst) != 0:
       #lst = l.strip().split('\t')
       self.frame = int(lst[0])
-      self.starts = map(int, lst[1].split(','))
-      self.altstarts = map(int, lst[2].split(','))
+      if '' == lst[1] : 
+        self.starts = []
+      else : self.starts = map(int, lst[1].split(','))
+      if lst[2] == '' : self.altstarts = []
+      else : self.altstarts = map(int, lst[2].split(','))
       self.stop = int(lst[3])
     else:
       self.frame = frame
