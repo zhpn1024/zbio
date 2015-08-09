@@ -33,6 +33,9 @@ class Orf:
     return len(self.starts) + len(self.altstarts) > 0
   def has_stop(self):
     return self.stop >= 0
+  @property
+  def start(self):
+    return min(self.starts + self.altstarts)
   def has_strictstart(self):
     return len(self.starts) > 0
   def is_complete(self):
