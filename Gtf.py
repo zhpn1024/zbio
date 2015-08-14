@@ -10,6 +10,7 @@ class exon:
     self.attr = attr(lst[8], gff)
     self.gff = gff
     self.frame = lst[7]
+    self.lst = lst
   def __repr__(self):
     return self.chr + ':'+str(self.start)+'-'+str(self.stop)+':'+self.strand
   def __str__(self):
@@ -45,6 +46,16 @@ class exon:
     else : return self.start
   def shortStr(self):
     return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
+  def __call__(self, **args):
+    lst = self.lst[:]
+    new = exon(lst, self.gff)
+    for k in args.keys():
+      new.__dict__[k]=args[k]
+    return new
+  def __sub__(self, other):
+    return sub(self, other)
+  def intersect(self, other):
+    return intersect(self, other)
     
 def attr(s, gff = False):
   if type(s) == dict: return s
@@ -105,13 +116,13 @@ class gtfTrans(exon):
     self.exons.sort(reverse = self.is_reverse())
     self.cds.sort(reverse = self.is_reverse())
   @property
-  def cds_start(self): #Bed12
-    try: return self.start_codon.end5
-    except : return -1
+  def cds_start(self): 
+    if self.start_codon is None : return None
+    return self.genome_pos(self.cdna_pos(self.start_codon.end3) - 3, 1)
   @property
   def cds_stop(self):
-    try: return self.stop_codon.end3
-    except : return -1
+    if self.stop_codon is None : return None
+    return self.genome_pos(self.cdna_pos(self.stop_codon.end5) + 3, 0)
   @property
   def thick_start(self):
     if self.is_reverse(): return self.cds_stop
@@ -125,6 +136,9 @@ class gtfTrans(exon):
     for e in self.exons:
       l += len(e)
     return l
+  def cds_length(self): 
+    try : return self.cdna_pos(self.stop_codon.end5) - self.cdna_pos(self.start_codon.end3) + 6 ##
+    except: return 0
   @property
   def introns(self):
     introns = []
@@ -372,56 +386,18 @@ def gtfTransIter(fin, filt = [], gff = False):
       yield t
   #return genes, trans
 
-# def gtfGeneIter(fin):
-#   gid = ''
-#   for l in fin:
-#     if l[0] == '#' : continue
-#     lst=l.strip().split('\t')
-#     if lst[2] == 'gene':
-#       if gid != '': yield g
-#       g = gtfGene(lst)
-#       gid = g.id
-#       trans = {}
-#     elif lst[2] == 'transcript':
-#       t = gtfTrans(lst)
-#       if t.attr['gene_id'] != gid:
-#         if gid != '': yield g
-#         g = gtfGene(lst)
-#         gid = g.id
-#         trans = {}
-#       g.addTrans(t)
-#       trans[t.id] = t
-#     else:
-#       e = exon(lst)
-#       if e.attr['gene_id'] != gid:
-#         if gid != '': yield g
-#         g = gtfGene(lst)
-#         gid = g.id
-#         trans = {}
-#       if e.attr['transcript_id'] not in trans:
-#         t = gtfTrans(lst)
-#         g.addTrans(t)
-#         trans[t.id] = t
-#       t.addExon(e)
-#   if gid != '': yield g
+def sub(a, b): # a - b
+  if a.chr != b.chr : return [a]
+  if a.start >= b.stop or a.stop <= b.start : return [a]
+  out = []
+  if a.start < b.start : out.append(a(stop = b.start))
+  if b.stop < a.stop: out.append(a(start = b.stop))
+  return out
 
-# def gtfTransIter(fin):
-#   tid = ''
-#   for l in fin:
-#     if l[0] == '#' : continue
-#     lst=l.strip().split('\t')
-#     if lst[2] == 'gene':
-#       if tid != '': yield t
-#     elif lst[2] == 'transcript':
-#       if tid != '': yield t
-#       t = gtfTrans(lst)
-#       tid = t.id
-#     else:
-#       e = exon(lst)
-#       if e.attr['transcript_id'] != tid:
-#         if tid != '': yield t
-#         t = gtfTrans(lst)
-#         tid = t.id
-#       t.addExon(e)
-#   if tid != '': yield t
+def intersect(a, b): # a & b
+  out = []
+  if a.chr != b.chr : return out
+  if a.start >= b.stop or a.stop <= b.start : return out
+  out.append(a(start = max(a.start, b.start), stop = min(a.stop, b.stop)))
+  return out
 

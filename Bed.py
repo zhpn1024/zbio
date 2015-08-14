@@ -70,8 +70,12 @@ class Bed3:
     return Bed3(self)
   def __getitem__(self,i): #All bed
     return self.items[i]
-  def __cmp__(self,other): #All bed
+  def __cmp__(self, other): #All bed
     return cmp(self.chr,other.chr) or cmp(self.start,other.start) or cmp(self.stop,other.stop)
+  def __sub__(self, other):
+    return sub(self, other)
+  def intersect(self, other):
+    return intersect(self, other)
   def headerline(self,sep='\t'):# Header string, fit all bed
     sep=str(sep)
     return sep.join(self.Header)
@@ -415,3 +419,23 @@ def shortBed(s, name = ''): #like chr1:1-200:+
   if len(lst) >= 3: strand = lst[2]
   else: stand = '.'
   return Bed6([lst[0], l1[0], l1[1], name, 0, strand])
+
+def sub(a, b): # a - b
+  if a.chr != b.chr : return [a]
+  if a.start >= b.stop or a.stop <= b.start : return [a]
+  out = []
+  if a.start < b.start : out.append(a(stop = b.start))
+  if b.stop < a.stop: out.append(a(start = b.stop))
+  return out
+
+def intersect(a, b): # a & b
+  out = []
+  if a.chr != b.chr : return out
+  if a.start >= b.stop or a.stop <= b.start : return out
+  out.append(a(start = max(a.start, b.start), stop = min(a.stop, b.stop)))
+  return out
+
+def test():
+  return 1
+
+
