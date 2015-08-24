@@ -304,14 +304,17 @@ def gtfGeneIter(fin, filt = [], gff = False):
     if lst[2] == 'region' : continue
     if lst[0] != chr:
       for gid in gidlist:
+        genes[gid].check()
         yield genes[gid]
       genes = {}
       trans = {}
       gidlist = []
       chr = lst[0]
+    e = exon(lst, gff)
+    if filt != [] and e.gid not in filt : continue
     if lst[2] == 'gene':
-      if filt != [] and lst[1] not in filt: 
-        continue
+      #if filt != [] and lst[1] not in filt: 
+        #continue
       g = gtfGene(lst, gff)
       genes[g.id] = g
       if g.id not in gidlist: gidlist.append(g.id)
@@ -324,7 +327,7 @@ def gtfGeneIter(fin, filt = [], gff = False):
       genes[t.gid].addTrans(t)
       trans[t.id] = t
     else:
-      e = exon(lst, gff)
+      #e = exon(lst, gff)
       if e.gid == '' or e.tid == '' : continue
       if e.gid not in genes:
         g = gtfGene(lst, gff)
@@ -336,6 +339,7 @@ def gtfGeneIter(fin, filt = [], gff = False):
         trans[t.id] = t
       trans[e.tid].addExon(e)
   for gid in gidlist:
+    genes[gid].check()
     yield genes[gid]
     
 def gtfTransIter(fin, filt = [], gff = False):

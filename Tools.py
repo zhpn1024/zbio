@@ -215,12 +215,23 @@ def randOverlapIter(bedIterA, bedListB, func=overlap, ignoreStrand = True): # Li
       #print i, i0, i1
       if a > bedListB[i] : i0 = i
       else: i1 = i
-    if func(a, bedListB[i0]):
-      if ignoreStrand or a.strand == bedListB[i0].strand :
-        yield (a, bedListB[i0])
-    if func(a, bedListB[i1]):
-      if ignoreStrand or a.strand == bedListB[i0].strand :
-        yield (a, bedListB[i1])
+    i = i0
+    while func(a, bedListB[i]):
+      if ignoreStrand or a.strand == bedListB[i].strand :
+        yield (a, bedListB[i])
+      i -= 1
+    i = i1
+    while func(a, bedListB[i]):
+      if ignoreStrand or a.strand == bedListB[i].strand :
+        yield (a, bedListB[i])
+      i += 1
+      #else : 
+        #print 'i0', ignoreStrand, a.id, a.strand, bedListB[i0].id, bedListB[i0].strand
+    #if func(a, bedListB[i1]):
+      #if ignoreStrand or a.strand == bedListB[i1].strand :
+        #yield (a, bedListB[i1])
+      #else : 
+        #print 'i1', ignoreStrand, a,id, a.strand, bedListB[i1].id, bedListB[i1].strand
 
 def findOverlap(q, lst, func=overlap, ignoreStrand = True): # List should have no overlap
   m = len(lst)
