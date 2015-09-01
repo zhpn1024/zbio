@@ -1,20 +1,29 @@
 import math
-from scipy.stats import nbinom
+from scipy.stats import nbinom, chisquare
 logarr = [None]
 def logarrExt(n, logarr = logarr):
   l = len(logarr)
   if l < n + 1 : 
     logarr += [None] * (n + 1 - l)
-    for i in range(len(logarr), n + 1):
+    for i in range(l, n + 1):
       logarr[i] = math.log(i)
   return logarr
-def dataCount(data):
+def data_count(data):
   total, cnt = 0, 0
   for k in data:
     total += k * data[k]
     cnt += data[k]
   return total, cnt
-def loadData(arr):
+def mean_var(data):
+  total, tsq, cnt = 0, 0, 0
+  for k in data:
+    total += k * data[k]
+    cnt += data[k]
+    tsq += k * k * data[k]
+  mean = float(total) / cnt
+  var = float(tsq) / cnt - mean ** 2
+  return mean, var
+def load_data(arr):
   data = {}
   for k in arr:
     if k not in data : data[k] = 0
@@ -93,7 +102,7 @@ def binomial(k, n, p = 0.5, show=False):
     pr *= pi
     if show: print pr
   return pr
-def binomLog(k, n, p = 0.5, logarr = logarr, show = False): #log probability value
+def binom_log(k, n, p = 0.5, logarr = logarr, show = False): #log probability value
   if n < 0 : return None
   if k > n or k < 0: return None #None is log(0)
   if p < 0 : p = 0
@@ -122,11 +131,11 @@ def binomLog(k, n, p = 0.5, logarr = logarr, show = False): #log probability val
     lpr += logarr[n - i] - logarr[k - i]
     #else : lpr += math.log10(n - i) - math.log10(k - i)
   return lpr
-def binomTest(k, n, p = 0.5, alt = "g", log = True, logarr = logarr, show=False): # No two sided yet!
+def binom_test(k, n, p = 0.5, alt = "g", log = True, logarr = logarr, show=False): # No two sided yet!
   if not log : return binomTest0(k, n, p, alt, show) # if log, p are calculated with log10 values
   #logarr = [None] * (n + 1)
   logarrExt(n, logarr = logarr)
-  lpk = binomLog(k, n, p, logarr)
+  lpk = binom_log(k, n, p, logarr)
   if show : print lpk
   if lpk is None : 
     if alt[0] == 'g' and p >= 1: return 1
@@ -176,3 +185,119 @@ def binomTest0(k, n, p = 0.5, alt = "g", show=False): # No two sided yet!
       pk *= r
       pv += pk
   return pv
+class negbinom: #Number of 'failures' before 'r' 'successes' with success probability 'p'
+  rMax = 1e5
+  rMin = 0
+  Delta = 1e-10
+  def __init__(self, r = 1.0, p = 0.5):
+    self.p = p
+    self.r = r
+  @property
+  def q(self):
+    return 1 - self.p
+  def expect(self):
+    return self.q * self.r / self.p
+  def variance(self):
+    return self.expect() / self.p
+  def logpmf(self, k = 0):
+    return nbinom.logpmf(k, self.r, self.p)
+  def pmf(self, k = 0):
+    return nbinom.pmf(k, self.r, self.p)
+  def pvalue(self, k = 0):
+    return 1 - nbinom.cdf(k-1, self.r, self.p)
+  def estimate(self, data): #data dict value:counts
+    total, cnt = data_count(data)
+    rmax, rmin = self.rMax, self.rMin
+    rmid = (rmax + rmin) / 2
+    while rmax - rmin >= self.Delta:
+      #print rmax, rmin
+      score = self.r_log_like_score(data, rmid)
+      #print score, cnt, rmid
+      if score > 0 : rmin = rmid
+      elif score < 0 : rmax = rmid
+      else : break
+      rmid = (rmax + rmin) / 2
+    self.r = rmid
+    #self.p = total / (self.r * cnt + total)
+    self.p = self.r / (self.r + 1.0*total/cnt)
+    return self.r, self.p
+  def log_likelihood(self, data):
+    score = 0.0
+    for k in data:
+      score += data[k] * self.logpmf(k)
+    return score
+  def r_log_like_score(self, data, r = -1):
+    if r < 0 : r = self.r
+    total, cnt = data_count(data)
+    #dr = scipy.special.digamma(r)
+    #score = math.log(self.q) - dr
+    s1, d = 0, 0
+    for i in range(max(data.keys()) + 1):
+      if i in data : s1 += d * data[i]
+      d += 1.0 / (r + i)
+    score = s1 / cnt + math.log(r / (r + 1.0*total/cnt))
+    return score
+  def chisquare_test(self, data):
+    total, cnt = data_count(data)
+    obs, exs = [], []
+    ob, ex = 0, 0
+    i0 = 0
+    for i in range(max(data.keys()) + 1) :
+      if i in data : ob += data[i]
+      ex += cnt * self.pmf(i)
+      if ex >= 5 : 
+        obs.append(ob)
+        exs.append(ex)
+        ob, ex = 0, 0
+        i0 = i + 1
+    ex = cnt * self.pvalue(i0)
+    obs.append(ob)
+    exs.append(ex)
+    #print obs, exs, len(obs) - 1, len(exs)
+    return chisquare(obs, exs)
+  
+class ztnb(negbinom):
+  def logpmf(self, k = 1):
+    if k < 1 : return negbinom.pmf(self, -1)
+    p0 = negbinom.pmf(self, 0)
+    lp = negbinom.logpmf(self, k)
+    return lp - math.log(1 - p0)
+  def pmf(self, k = 1):
+    if k < 1 : return 0
+    p0 = negbinom.pmf(self, 0)
+    p = negbinom.pmf(self, k)
+    return p / (1- p0)
+  def expected_zeros(self, size):
+    p0 = negbinom.pmf(self, 0)
+    return size * p0 / (1 - p0)
+  def estimate(self, data, max_iter = 1e4, nlike = 10):
+    total, cnt = data_count(data)
+    lastllh = 0
+    i = 0
+    for j in range(max_iter) :
+      ez = self.expected_zeros(cnt)
+      data[0] = ez
+      negbinom.estimate(self, data)
+      data[0] = 0
+      i += 1
+      if i < nlike : continue
+      i = 0
+      llh = self.log_likelihood(data)
+      d = abs(2 * (llh - lastllh) / (llh + lastllh) / nlike)
+      if d < self.Delta : break
+      print d, llh, self.r, self.p, ez
+      lastllh = llh
+    return self.r, self.p
+  def pvalue(self, k = 1):
+    if k <= 1 : return 1
+    p0 = negbinom.pmf(self, 0)
+    p = negbinom.pvalue(self, k)
+    return p / (1- p0)
+  def expect(self):
+    p0 = negbinom.pmf(self, 0)
+    return negbinom.expect(self) / (1 - p0)
+  def variance(self):
+    nb = negbinom(self.r, self.p)
+    p0 = nb.pmf(0)
+    return (nb.variance() + nb.expect() ** 2) / (1 - p0) - self.expect() ** 2
+    #return self.expect / self.p

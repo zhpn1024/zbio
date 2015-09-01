@@ -410,6 +410,7 @@ def refFlatIter(file):
     sizes = tuple(map(lambda x, y: y - x, starts, stops))
     lstb = [lst[2],lst[4],lst[5],lst[1],lst[0],lst[3],lst[6],lst[7],"0,0,0",lst[8],sizes,st1]
     bed = Bed12(lstb)
+    bed.gid = bed.score ##
     yield bed
     
 def shortBed(s, name = ''): #like chr1:1-200:+

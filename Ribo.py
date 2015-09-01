@@ -1,5 +1,5 @@
 import random
-from zbio import Stat
+from zbio import stat
 
 def intlog2(r):
   i = 0
@@ -130,7 +130,8 @@ class Region:
     p = float(len(self))/self.ers.length
     if l > 0: p2 = float(len(self))/l
     else : p2 = p
-    return Stat.binomTest(self.n, self.ers.total, p) / p2
+    #print self.n, p
+    return stat.binom_test(self.n, self.ers.total, p) / p2
   
   def getFrame(self, start = -1, stop = -1):
     if start < 0 : start = self.start 
