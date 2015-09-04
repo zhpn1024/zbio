@@ -186,9 +186,9 @@ def binomTest0(k, n, p = 0.5, alt = "g", show=False): # No two sided yet!
       pv += pk
   return pv
 class negbinom: #Number of 'failures' before 'r' 'successes' with success probability 'p'
-  rMax = 1e5
-  rMin = 0
-  Delta = 1e-10
+  rMax = 1e8
+  rMin = 1e-8
+  Delta = 1e-8
   def __init__(self, r = 1.0, p = 0.5):
     self.p = p
     self.r = r
@@ -208,15 +208,16 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
   def estimate(self, data): #data dict value:counts
     total, cnt = data_count(data)
     rmax, rmin = self.rMax, self.rMin
-    rmid = (rmax + rmin) / 2
-    while rmax - rmin >= self.Delta:
+    rmid = math.sqrt(rmax * rmin)
+    while (rmax - rmin) / rmid >= self.Delta:
       #print rmax, rmin
       score = self.r_log_like_score(data, rmid)
       #print score, cnt, rmid
       if score > 0 : rmin = rmid
       elif score < 0 : rmax = rmid
       else : break
-      rmid = (rmax + rmin) / 2
+      #rmid = (rmax + rmin) / 2
+      rmid = math.sqrt(rmax * rmin)
     self.r = rmid
     #self.p = total / (self.r * cnt + total)
     self.p = self.r / (self.r + 1.0*total/cnt)
@@ -233,6 +234,7 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
     #score = math.log(self.q) - dr
     s1, d = 0, 0
     for i in range(max(data.keys()) + 1):
+      #d += 1.0 / (r + i)
       if i in data : s1 += d * data[i]
       d += 1.0 / (r + i)
     score = s1 / cnt + math.log(r / (r + 1.0*total/cnt))
@@ -251,9 +253,11 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
         ob, ex = 0, 0
         i0 = i + 1
     ex = cnt * self.pvalue(i0)
-    obs.append(ob)
-    exs.append(ex)
-    #print obs, exs, len(obs) - 1, len(exs)
+    #obs.append(ob)
+    #exs.append(ex)
+    obs[-1] += ob
+    exs[-1] += ex
+    print obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs)
     return chisquare(obs, exs)
   
 class ztnb(negbinom):

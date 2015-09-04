@@ -9,9 +9,9 @@ class Bamfile(pysam.Samfile):
 class Bam():#AlignedRead
   
   def __init__(self,read,bamfile):
-    self.read=read
-    self.ref=bamfile.references
-    
+    self.read = read
+    self.ref = bamfile.references
+    self.lens = bamfile.lengths
   #def __getattr__(self,attr):
     #a=getattr(self,attr)
     #return a
