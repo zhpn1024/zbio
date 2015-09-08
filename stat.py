@@ -1,7 +1,7 @@
 import math
 from scipy.stats import nbinom, chisquare
 logarr = [None]
-def logarrExt(n, logarr = logarr):
+def logarr_ext(n, logarr = logarr):
   l = len(logarr)
   if l < n + 1 : 
     logarr += [None] * (n + 1 - l)
@@ -121,7 +121,7 @@ def binom_log(k, n, p = 0.5, logarr = logarr, show = False): #log probability va
   nk = n - k
   #if k == 0 : return  lq * n
   lpr += lp * k + lq * nk
-  logarrExt(n, logarr = logarr)
+  logarr_ext(n, logarr = logarr)
   #if len(logarr) >= n + 1 : arr = False
   #else : arr = True
     #logarr = [None] * (n + 1)
@@ -134,7 +134,7 @@ def binom_log(k, n, p = 0.5, logarr = logarr, show = False): #log probability va
 def binom_test(k, n, p = 0.5, alt = "g", log = True, logarr = logarr, show=False): # No two sided yet!
   if not log : return binomTest0(k, n, p, alt, show) # if log, p are calculated with log10 values
   #logarr = [None] * (n + 1)
-  logarrExt(n, logarr = logarr)
+  logarr_ext(n, logarr = logarr)
   lpk = binom_log(k, n, p, logarr)
   if show : print lpk
   if lpk is None : 
@@ -144,7 +144,7 @@ def binom_test(k, n, p = 0.5, alt = "g", log = True, logarr = logarr, show=False
   elif lpk == 0 : return 1
   #if k == 0 and alt[0] == 'g' : return 1
   #if k == n and alt[0] != 'g' : return 1
-  pv = math.exp(lpk) ### log10 reverse
+  pv = math.exp(lpk) ### log reverse
   q = 1 - p
   lp = math.log(p)
   lq = math.log(q)
@@ -305,3 +305,148 @@ class ztnb(negbinom):
     p0 = nb.pmf(0)
     return (nb.variance() + nb.expect() ** 2) / (1 - p0) - self.expect() ** 2
     #return self.expect / self.p
+
+class poisson: # Poisson distribution
+  lMax = 1e8
+  lMin = 1e-8
+  Delta = 1e-8
+  def __init__(self, l = 1.0):
+    self.l = l
+  def expect(self):
+    return self.l
+  def variance(self):
+    return self.l
+  def logpmf(self, k = 0, logarr = logarr):
+    logarr_ext(k, logarr = logarr)
+    lpr = k * math.log(self.l) - self.l
+    for i in range(k):
+      lpr -= logarr[k - i]
+    return lpr
+  def pmf(self, k = 0):
+    return math.exp(self.logpmf(k))
+  def cdf(self, k = 0, logarr = logarr):
+    if k < 0 : return 0
+    logarr_ext(k, logarr = logarr)
+    lpr = self.logpmf(0)
+    logl = math.log(self.l)
+    cdf = math.exp(lpr)
+    for i in range(1, k + 1):
+      lpr += logl - logarr[i]
+      cdf += math.exp(lpr)
+    return cdf
+  def pvalue(self, k = 0):
+    return 1 - self.cdf(k-1)
+  def estimate(self, data): #data dict value:counts
+    total, cnt = data_count(data)
+    self.l = float(total) / cnt
+    return self.l
+  def log_likelihood(self, data):
+    score = 0.0
+    for k in data:
+      score += data[k] * self.logpmf(k)
+    return score
+  def r_log_like_score(self, data, l = -1):
+    if l < 0 : l = self.l
+    total, cnt = data_count(data)
+    return float(total) / l / cnt -1
+  def chisquare_test(self, data):
+    total, cnt = data_count(data)
+    obs, exs = [], []
+    ob, ex = 0, 0
+    i0 = 0
+    for i in range(max(data.keys()) + 1) :
+      if i in data : ob += data[i]
+      ex += cnt * self.pmf(i)
+      if ex >= 5 : 
+        obs.append(ob)
+        exs.append(ex)
+        ob, ex = 0, 0
+        i0 = i + 1
+    ex = cnt * self.pvalue(i0)
+    obs[-1] += ob
+    exs[-1] += ex
+    print obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs)
+    return chisquare(obs, exs)
+
+class ztpoisson: #Zero truncated poisson distribution
+  def expect(self):
+    p0 = poisson.pmf(self, 0)
+    return self.l / (1 - p0)
+  def variance(self):
+    p0 = poisson.pmf(self, 0)
+    return (self.l + self.l ** 2) / (1 - p0) - self.expect() ** 2
+  def logpmf(self, k = 0):
+    if k < 1 : return negbinom.pmf(self, -1)
+    p0 = math.exp(poisson.logpmf(self, 0))
+    lp = poisson.logpmf(self, k)
+    return lp - math.log(1 - p0)
+  #def pmf(self, k = 0):
+    #return math.exp(self.logpmf(k))
+  def cdf(self, k = 1, logarr = logarr):
+    if k <= 0 : return 0
+    logarr_ext(k, logarr = logarr)
+    lpr = self.logpmf(1)
+    logl = math.log(self.l)
+    cdf = math.exp(lpr)
+    for i in range(2, k + 1):
+      lpr += logl - logarr[i]
+      cdf += math.exp(lpr)
+    return cdf
+  #def pvalue(self, k = 0):
+    #return 1 - self.cdf(k - 1)
+  def estimate(self, data, max_iter = 1e4, nlike = 10): ######
+    total, cnt = data_count(data)
+    lastllh = 0
+    i = 0
+    for j in range(max_iter) :
+      ez = self.expected_zeros(cnt)
+      data[0] = ez
+      negbinom.estimate(self, data)
+      data[0] = 0
+      i += 1
+      if i < nlike : continue
+      i = 0
+      llh = self.log_likelihood(data)
+      d = abs(2 * (llh - lastllh) / (llh + lastllh) / nlike)
+      if d < self.Delta : break
+      print d, llh, self.r, self.p, ez
+      lastllh = llh
+    return self.r, self.p
+  def log_likelihood(self, data):
+    score = 0.0
+    for k in data:
+      score += data[k] * self.logpmf(k)
+    return score
+  def r_log_like_score(self, data, r = -1):
+    if r < 0 : r = self.r
+    total, cnt = data_count(data)
+    #dr = scipy.special.digamma(r)
+    #score = math.log(self.q) - dr
+    s1, d = 0, 0
+    for i in range(max(data.keys()) + 1):
+      #d += 1.0 / (r + i)
+      if i in data : s1 += d * data[i]
+      d += 1.0 / (r + i)
+    score = s1 / cnt + math.log(r / (r + 1.0*total/cnt))
+    return score
+  def chisquare_test(self, data):
+    total, cnt = data_count(data)
+    obs, exs = [], []
+    ob, ex = 0, 0
+    i0 = 0
+    for i in range(max(data.keys()) + 1) :
+      if i in data : ob += data[i]
+      ex += cnt * self.pmf(i)
+      if ex >= 5 : 
+        obs.append(ob)
+        exs.append(ex)
+        ob, ex = 0, 0
+        i0 = i + 1
+    ex = cnt * self.pvalue(i0)
+    #obs.append(ob)
+    #exs.append(ex)
+    obs[-1] += ob
+    exs[-1] += ex
+    print obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs)
+    return chisquare(obs, exs)
+  
