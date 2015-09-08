@@ -9,7 +9,7 @@ senseframe = [1, 2, 3]
 antiframe = [-1, -2, -3]
 frame = [1, 2, 3, -1, -2, -3]
 
-class Orf:
+class orf:
   def __init__(self, lst = [], frame = 0, stop = -1):
     if len(lst) != 0:
       #lst = l.strip().split('\t')
@@ -28,7 +28,7 @@ class Orf:
   def __str__(self):
     return "%d\t%s\t%s\t%d" % (self.frame, ','.join(map(str, self.starts)), ','.join(map(str, self.altstarts)), self.stop)
   def __repr__(self):
-    return "ORF object: " + str(self)
+    return "orf object: " + str(self)
   def has_start(self):
     return len(self.starts) + len(self.altstarts) > 0
   def has_stop(self):
@@ -40,7 +40,7 @@ class Orf:
     return len(self.starts) > 0
   def is_complete(self):
     return self.has_start() and self.has_stop()
-  def orfByRibo(self, frame, start, stop, srange = 4):
+  def orf_by_ribo(self, frame, start, stop, srange = 4):
     if self.frame != frame: return None
     if self.stop < start: return None
     if min(self.starts + self.altstarts) > stop : return None
@@ -60,7 +60,7 @@ class Orf:
     if sm > 0 : return (s, self.stop)
     return None
 
-def allORF(seq, strand = '+') :
+def allorf(seq, strand = '+') :
   seq = seq.upper().replace('U','T')
   if strand == '+' : fr = senseframe
   elif strand == '-' : 
@@ -78,7 +78,7 @@ def allORF(seq, strand = '+') :
     else: 
       s = antiseq
       fa = -f
-    orf = Orf(frame = f)
+    orf = orf(frame = f)
     for i in range(fa-1, length, codonSize):
       try: codon = s[i:i+codonSize]
       except: break
@@ -90,9 +90,9 @@ def allORF(seq, strand = '+') :
         orf.stop = i + codonSize
         if orf.has_start():
           yield orf
-          orf = Orf(frame = f)
+          orf = orf(frame = f)
 
-def findORF(seq, strand = '+', altcstart = False) :
+def findorf(seq, strand = '+', altcstart = False) :
   seq = seq.upper().replace('U','T')
   if strand == '+' : fr = senseframe
   elif strand == '-' : 

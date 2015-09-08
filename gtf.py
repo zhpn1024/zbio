@@ -15,7 +15,7 @@ class exon:
     return self.chr + ':'+str(self.start)+'-'+str(self.stop)+':'+self.strand
   def __str__(self):
     return "%s\tunknown\t%s\t%d\t%d\t.\t%s\t%s\t%s" % (self.chr, self.type, self.start+1, self.stop, self.strand,self.frame,self.attrstr)
-  def shortStr(self):
+  def short_str(self):
     return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
   def __cmp__(self, other):
     return cmp(self.chr,other.chr) or cmp(self.start,other.start) or cmp(self.stop,other.stop)
@@ -44,7 +44,7 @@ class exon:
   def end3(self): #3' end, all bed
     if self.strand != '-' : return self.stop
     else : return self.start
-  def shortStr(self):
+  def short_str(self):
     return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
   def __call__(self, **args):
     lst = self.lst[:]
@@ -81,7 +81,7 @@ def attr(s, gff = False):
     a[l2[0]] = eval(l2[1])
   return a
   
-class gtfTrans(exon):
+class gtftrans(exon):
   def __init__(self, lst, gff = False): 
     exon.__init__(self, lst, gff)
     #self.pos = exon(lst)
@@ -97,7 +97,7 @@ class gtfTrans(exon):
     self.other = []
     #self.gene = self.attr['gene_id']
     #self.attr = self.pos.attr
-  def addExon(self, e): 
+  def add_exon(self, e): 
     if e.type == 'exon': self.exons.append(e)
     elif e.type == 'CDS': self.cds.append(e)
     elif e.type == 'UTR': self.utr.append(e)
@@ -186,7 +186,7 @@ class gtfTrans(exon):
         p1 -= len(e)
     return None
     
-class gtfGene(exon):
+class gtfgene(exon):
   def __init__(self, lst, gff = False):
     exon.__init__(self, lst, gff)
     #self.pos = exon(lst)
@@ -196,7 +196,7 @@ class gtfGene(exon):
     self.trans = []
     self.type = lst[1]
     #self.attr = self.pos.attr
-  def addTrans(self, tr):
+  def add_trans(self, tr):
     #tr = gtf_t(lst)
     self.trans.append(tr)
     self.check()
@@ -212,7 +212,7 @@ class gtfGene(exon):
       if t.start < self.start: self.start = t.start
       if t.stop > self.stop: self.stop = t.stop
     
-def loadGtf(fin, filt = [], gff = False):
+def load_gtf(fin, filt = [], gff = False):
   genes = {}
   trans = {}
   for l in fin:
@@ -222,34 +222,34 @@ def loadGtf(fin, filt = [], gff = False):
     if lst[2] == 'gene':
       if filt != [] and lst[1] not in filt: 
         continue
-      g = gtfGene(lst, gff)
+      g = gtfgene(lst, gff)
       genes[g.id] = g
       #print g.id
     elif lst[2] == 'transcript':
-      t = gtfTrans(lst, gff)
+      t = gtftrans(lst, gff)
       #g.add_trans(t)
       if t.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         #continue ##
-      genes[t.gid].addTrans(t)
+      genes[t.gid].add_trans(t)
       trans[t.id] = t
       #print t.id
     else:
       e = exon(lst, gff)
       if e.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         #continue
       #print e.attr['exon_number']
       if e.tid not in trans:
-        t = gtfTrans(lst, gff)
-        genes[t.gid].addTrans(t)
+        t = gtftrans(lst, gff)
+        genes[t.gid].add_trans(t)
         trans[t.id] = t
-      trans[e.tid].addExon(e)
+      trans[e.tid].add_exon(e)
   return genes, trans
 
-def fetchGtf(fin, gid = '', tid = '', gff = False):
+def fetch_gtf(fin, gid = '', tid = '', gff = False):
   genes = {}
   trans = {}
   if gid == '' and tid == '' : return genes, trans
@@ -265,35 +265,35 @@ def fetchGtf(fin, gid = '', tid = '', gff = False):
     if e.tid != tid  and e.gid != gid : continue
     if e.gid == '' : continue
     if lst[2] == 'gene':
-      g = gtfGene(lst, gff)
+      g = gtfgene(lst, gff)
       if g.id == gid : genes[g.id] = g
       #print g.id
     elif lst[2] == 'transcript':
-      t = gtfTrans(lst, gff)
+      t = gtftrans(lst, gff)
       if t.id != tid  and t.gid != gid : continue 
       #g.add_trans(t)
       if t.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         #continue ##
-      genes[t.gid].addTrans(t)
+      genes[t.gid].add_trans(t)
       trans[t.id] = t
       #print t.id
     else:
       if e.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         #continue
       #print e.attr['exon_number']
       if e.tid not in trans:
-        t = gtfTrans(lst, gff)
-        genes[t.gid].addTrans(t)
+        t = gtftrans(lst, gff)
+        genes[t.gid].add_trans(t)
         trans[t.id] = t
-      trans[e.tid].addExon(e)
+      trans[e.tid].add_exon(e)
     ch = g.chr
   return genes, trans
 
-def gtfGeneIter(fin, filt = [], gff = False):
+def gtfgene_iter(fin, filt = [], gff = False):
   genes = {}
   trans = {}
   gidlist = []
@@ -315,34 +315,34 @@ def gtfGeneIter(fin, filt = [], gff = False):
     if lst[2] == 'gene':
       #if filt != [] and lst[1] not in filt: 
         #continue
-      g = gtfGene(lst, gff)
+      g = gtfgene(lst, gff)
       genes[g.id] = g
       if g.id not in gidlist: gidlist.append(g.id)
     elif lst[2] == 'transcript':
-      t = gtfTrans(lst, gff)
+      t = gtftrans(lst, gff)
       if t.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         gidlist.append(g.id)
-      genes[t.gid].addTrans(t)
+      genes[t.gid].add_trans(t)
       trans[t.id] = t
     else:
       #e = exon(lst, gff)
       if e.gid == '' or e.tid == '' : continue
       if e.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         gidlist.append(g.id)
       if e.tid not in trans:
-        t = gtfTrans(lst, gff)
-        genes[t.gid].addTrans(t)
+        t = gtftrans(lst, gff)
+        genes[t.gid].add_trans(t)
         trans[t.id] = t
-      trans[e.tid].addExon(e)
+      trans[e.tid].add_exon(e)
   for gid in gidlist:
     genes[gid].check()
     yield genes[gid]
     
-def gtfTransIter(fin, filt = [], gff = False):
+def gtftrans_iter(fin, filt = [], gff = False):
   genes = {}
   trans = {}
   gidlist = []
@@ -362,29 +362,29 @@ def gtfTransIter(fin, filt = [], gff = False):
     if lst[2] == 'gene':
       if filt != [] and lst[1] not in filt: 
         continue
-      g = gtfGene(lst, gff)
+      g = gtfgene(lst, gff)
       genes[g.id] = g
       if g.id not in gidlist: gidlist.append(g.id)
     elif lst[2] == 'transcript':
-      t = gtfTrans(lst, gff)
+      t = gtftrans(lst, gff)
       if t.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         gidlist.append(g.id)
-      genes[t.gid].addTrans(t)
+      genes[t.gid].add_trans(t)
       trans[t.id] = t
     else:
       e = exon(lst, gff)
       if e.gid not in genes:
-        g = gtfGene(lst, gff)
+        g = gtfgene(lst, gff)
         genes[g.id] = g
         gidlist.append(g.id)
       if e.tid not in trans:
-        t = gtfTrans(lst, gff)
-        genes[t.gid].addTrans(t)
+        t = gtftrans(lst, gff)
+        genes[t.gid].add_trans(t)
         trans[t.id] = t
         #print e.attr['transcript_id'], t.id
-      trans[e.tid].addExon(e)
+      trans[e.tid].add_exon(e)
   for gid in gidlist:
     for t in genes[gid].trans:
       yield t

@@ -4,7 +4,7 @@ Sym = ['SYM','SYMBOL','NAME']
 Ali = ['ALI','ALIAS','ALIASES','SYNONYM','SYNONYMS']
 Ens = ['ENS','ENSEMBL','ENSG']
 Full = ['FULL','FULLNAME']
-class Gene():
+class gene():
   def __init__(self, l, sep = '\t', idx = [1,2,4,5,8,0]):
     lst = l.strip().split(sep)
     self.gid = lst[idx[0]]
@@ -41,20 +41,20 @@ class Gene():
     else:
       raise AttributeError, name
 
-class GeneDict():
+class geneDict():
   identifier = ('GeneID', 'Symbol', 'Ensembl')
   def __init__(self, ginfofile, sep = '\t'): # gene_info file for one species from NCBI
     self.gid = {}
     self.sym = {}
     self.ali = {}
     self.ens = {}
-    self.symUp = {} #Upper case
-    self.aliUp = {}
+    self.sym_up = {} #Upper case
+    self.ali_up = {}
     lastsp = ''
     neg = {}
     for l in ginfofile:
       if l[0] == '#' : continue
-      g = Gene(l, sep)
+      g = gene(l, sep)
       if lastsp != g.taxid and lastsp != '':
         if g.taxid not in neg:
           sys.stderr.write("Warning: There may be more than one species in gene_info file! Neglected: "+g.taxid+"\n")
@@ -63,11 +63,11 @@ class GeneDict():
       lastsp = g.taxid
       self.gid[g.gid] = g
       self.sym[g.sym] = g
-      self.symUp[g.sym.upper()] = g
+      self.sym_up[g.sym.upper()] = g
       for a in g.ali:
         if a not in ['','-']: 
           self.ali[a] = g
-          self.aliUp[a.upper()] = g
+          self.ali_up[a.upper()] = g
       if g.ens not in ['','-']: self.ens[g.ens] = g
   
   def __call__(self, *name, **attr):
@@ -82,18 +82,18 @@ class GeneDict():
     for a in attr:
       au = a.upper()
       if au in Gid:
-        g = self.byGid(attr[a])
+        g = self.by_gid(attr[a])
         if g != None : return g
       elif au in Ens:
-        g = self.byEns(attr[a])
+        g = self.by_ens(attr[a])
         if g != None : return g
       else: 
         namelist.append(attr[a])
     for n in namelist:
-        g = self.bySym(n)
+        g = self.by_sym(n)
         if g == None : 
-          if self.symRectify and n in self.SymErr:
-            g = self.bySym(self.SymErr[n])
+          if self.sym_rectify and n in self.sym_err:
+            g = self.by_sym(self.sym_err[n])
           if g == None : continue
         if g.gid not in gids: gids[g.gid] = 0
         gids[g.gid] += 1
@@ -101,26 +101,26 @@ class GeneDict():
     gid = sorted(gids.items(), key=lambda d:d[1])[-1][0]
     return self.gid[gid]
 
-  def bySym(self, sym):
+  def by_sym(self, sym):
     sym = str(sym)
     if sym in self.sym: return self.sym[sym]
     if sym in self.ali: return self.ali[sym]
     su = sym.upper()
-    if su in self.symUp: return self.symUp[su]
-    if su in self.aliUp: return self.aliUp[su]
+    if su in self.sym_up: return self.sym_up[su]
+    if su in self.ali_up: return self.ali_up[su]
     if su[0:3] == 'LOC' and su[3:] in self.gid:
       return self.gid[su[3:]]
     return None
-  def byGid(self, gid):
+  def by_gid(self, gid):
     gid = str(gid)
     if gid in self.gid: return self.gid[gid]
     return None
-  def byEns(self, ens):
+  def by_ens(self, ens):
     ens = str(ens)
     if ens in self.ens: return self.ens[ens]
     return None
-  symRectify = True
-  SymErr = {'MT-ATP6':'MTATP6','MT-CYB':'MTCYB','MT-ND4':'MTND4','MT-CO2':'MTCO2','MT-CO3':'MTCO3','MT-ND3':'MTND3','MT-ND5':'MTND5',
+  sym_rectify = True
+  sym_err = {'MT-ATP6':'MTATP6','MT-CYB':'MTCYB','MT-ND4':'MTND4','MT-CO2':'MTCO2','MT-CO3':'MTCO3','MT-ND3':'MTND3','MT-ND5':'MTND5',
             'PERPL':'PERP','MT-ATP8':'MTATP8','MT-ND1':'MTND1','MT-CO1':'MTCO1','MT-ND2':'MTND2',
             '1-Sep':'SEPT1','2-Sep':'SEPT2','3-Sep':'SEPT3','4-Sep':'SEPT4','5-Sep':'SEPT5','6-Sep':'SEPT6','7-Sep':'SEPT7',
             '8-Sep':'SEPT8','9-Sep':'SEPT9','10-Sep':'SEPT10','11-Sep':'SEPT11','12-Sep':'SEPT12','14-Sep':'SEPT14','15-Sep':'SEP15',

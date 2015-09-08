@@ -1,4 +1,4 @@
-class Exp():
+class exp():
   def __init__(self, sample, exp): #sample and expression list
     self.sample = sample
     self.exp = exp
@@ -19,12 +19,12 @@ class Exp():
     sep=str(sep)
     return sep.join(map(str, self.sample))
     
-class Trans(Exp):
+class trans(exp):
   def __init__(self, tid, sample, exp):
     self.id = tid
-    Exp.__init__(self, sample, exp)
+    exp.__init__(self, sample, exp)
   def __str__(self):
-    return self.id + '\t' + Exp.__str__(self)
+    return self.id + '\t' + exp.__str__(self)
   def __repr__(self):
     return 'tid\t' + '\t'.join(map(str, self.sample)) + "\n" + str(self)
   @property
@@ -34,14 +34,14 @@ class Trans(Exp):
     sep=str(sep)
     return 'tid' + sep + sep.join(map(str, self.sample))
     
-class Gene(Exp):
+class gene(exp):
   def __init__(self, gid, sample, exp):
     self.id = gid
-    Exp.__init__(self, sample, exp)
+    exp.__init__(self, sample, exp)
     self.trans = []
   def __str__(self):
     if len(self.trans) == 0:
-      return self.id + '\t' + Exp.__str__(self)
+      return self.id + '\t' + exp.__str__(self)
     else:
       s = ''
       for t in self.trans:
@@ -55,7 +55,7 @@ class Gene(Exp):
   @property
   def gid(self):
     return self.id
-  def addTrans(self, t):
+  def add_trans(self, t):
     self.trans.append(t)
   def headerline(self,sep='\t'):# Header string, fit all bed
     sep=str(sep)
@@ -72,7 +72,7 @@ def subarr(lst, ids = [], head = 0):
   for i in ids:
         a.append(lst[i])
   return a
-def gtExpIter(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
+def gtexp_iter(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
   if len(sample) == 0 :
     l = expfile.next()
     lst = l.strip().split(sep)
@@ -86,15 +86,15 @@ def gtExpIter(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
     t = Trans(tid, sample, exp)
     t.gid = gid
     yield t
-def gtExpLoad(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
+def gtexp_load(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
   gs = {}
-  for t in gtExpIter(expfile, gi, ti, sep, ei, sample):
+  for t in gtexp_iter(expfile, gi, ti, sep, ei, sample):
     if t.gid not in gs:
-      gs[t.gid] = Gene(t.gid, t.sample, t.exp)
-    gs[t.gid].addTrans(t)
+      gs[t.gid] = gene(t.gid, t.sample, t.exp)
+    gs[t.gid].add_trans(t)
   return gs
 
-def tExpIter(expfile, ti = 0, sep = '\t', ei = [], sample = []):
+def texp_iter(expfile, ti = 0, sep = '\t', ei = [], sample = []):
   if len(sample) == 0 :
     l = expfile.next()
     lst = l.strip().split(sep)
@@ -109,7 +109,7 @@ def tExpIter(expfile, ti = 0, sep = '\t', ei = [], sample = []):
     #t.gid = gid
     yield t
 
-def gExpIter(expfile, gi = 0, sep = '\t', ei = [], sample = []):
+def gexp_iter(expfile, gi = 0, sep = '\t', ei = [], sample = []):
   if len(sample) == 0 :
     l = expfile.next()
     lst = l.strip().split(sep)
@@ -120,7 +120,7 @@ def gExpIter(expfile, gi = 0, sep = '\t', ei = [], sample = []):
     #gid = lst[gi]
     gid = lst[gi]
     exp = map(float, subarr(lst, ei, gi+1))
-    g = Gene(gid, sample, exp)
+    g = gene(gid, sample, exp)
     #t.gid = gid
     yield g
 

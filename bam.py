@@ -1,14 +1,14 @@
 
 import pysam
-import Bed
+import bed
 
-class Bamfile(pysam.Samfile):
+class bamfile(pysam.Samfile):
   def __repr__(self):
     return 'pysam.Samfile '+self.filename
 
-class Bam():#AlignedRead
+class bam():#AlignedRead
   
-  def __init__(self,read,bamfile):
+  def __init__(self, read, bamfile):
     self.read = read
     self.ref = bamfile.references
     self.lens = bamfile.lengths
@@ -131,7 +131,7 @@ class Bam():#AlignedRead
       elif ctype in [2]:
         pos += l
       elif ctype in [3]:
-        b = Bed.Bed6([self.chr,pos,pos + l,self.id+"_intron"+str(i),p,self.strand])
+        b = bed.bed6([self.chr,pos,pos + l,self.id+"_intron"+str(i),p,self.strand])
         s.append(b)
         pos += l
         i += 1
@@ -178,12 +178,12 @@ class Bam():#AlignedRead
         i += 1
     return True
     
-def compatibleBamIter(bamfile, trans, mis = 0, sense = True):
+def compatible_bam_iter(bamfile, trans, mis = 0, sense = True):
   if trans.chr not in bamfile.references : raise StopIteration
   rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
   #introns = trans.introns
   for r in rds:
-    read = Bam(r, bamfile)
+    read = bam(r, bamfile)
     if sense and read.strand != trans.strand:
       #print read.id + " not sense"
       continue

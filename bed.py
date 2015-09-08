@@ -1,6 +1,6 @@
 
 
-class Bed3:
+class bed3:
   Header=('chr','start','stop')
   Format=(str,int,int)
   n=3
@@ -25,7 +25,7 @@ class Bed3:
     #return self.chr+'\t'+str(self.start)+'\t'+str(self.stop)
   def __repr__(self): #All bed
     return 'Bed'+str(self.n)+' object:\n'+str(self)+'\n'
-  def shortStr(self):
+  def short_str(self):
     return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
   @property
   def chr(self): #All bed
@@ -67,7 +67,7 @@ class Bed3:
   def is_reverse(self): #All bed
     return self.strand=='-'
   def bed(self): #Bed copy, Bed3 only
-    return Bed3(self)
+    return bed3(self)
   def __getitem__(self,i): #All bed
     return self.items[i]
   def __cmp__(self, other): #All bed
@@ -119,7 +119,7 @@ class Bed3:
     if self.is_contain(p): return abs(p-self.end5)
     else: return None
 
-class Bed6(Bed3):
+class bed6(bed3):
   Header=('chr','start','stop','id','score','strand')
   Format=(str,int,int,str,str,str)
   n=6
@@ -149,7 +149,7 @@ class Bed6(Bed3):
       stop=self.stop
       start=stop-n
       if start<0: start=0
-    return Bed6([self.chr,start,stop,self.id+'_Head_'+str(n),self.score,self.strand])
+    return bed6([self.chr,start,stop,self.id+'_Head_'+str(n),self.score,self.strand])
   
   def tail(self,n=10): #Bed6 and Bed12
     if n>len(self):
@@ -161,24 +161,24 @@ class Bed6(Bed3):
       stop=self.stop
       start=stop-n
       if start<0: start=0
-    return Bed6([self.chr,start,stop,self.id+'_Tail_'+str(n),self.score,self.strand])
+    return bed6([self.chr,start,stop,self.id+'_Tail_'+str(n),self.score,self.strand])
   
   def is_upstream(self, other): #other is upstream of self
     if self.strand == '-' : return other.start >= self.stop
     else : return other.stop <= self.start
   
 
-def comTotup(s): #comma string to tuple
+def com2tup(s): #comma string to tuple
   if type(s)==tuple: return s
   return tuple(map(int,s.strip().strip(',').split(',')))
-def tupTocom(t): #tuple to comma string
+def tup2com(t): #tuple to comma string
   if type(t)==str: return t
   return ','.join(map(str,t))+','
 
-class Bed12(Bed6):
+class bed12(bed6):
   
   Header=('chr','start','stop','id','score','strand',"cds_start","cds_stop","itemRgb","blockCount","blockSizes","blockStarts")
-  Format=(str,int,int,str,str,str,int,int,comTotup,int,comTotup,comTotup)
+  Format=(str,int,int,str,str,str,int,int,com2tup,int,com2tup,com2tup)
   n=12
   
   @property
@@ -208,13 +208,13 @@ class Bed12(Bed6):
   
   def __str__(self): #Bed string, Bed12 only
     l=list(self.items)
-    l[8]=tupTocom(l[8])
-    l[10]=tupTocom(l[10])
-    l[11]=tupTocom(l[11])
+    l[8]=tup2com(l[8])
+    l[10]=tup2com(l[10])
+    l[11]=tup2com(l[11])
     return '\t'.join(map(str,l))
   
   def bed(self): #Bed copy, Bed12 only
-    return Bed12(self)
+    return bed12(self)
   
   def cdna_length(self): #Bed12
     l = 0
@@ -243,7 +243,7 @@ class Bed12(Bed6):
       end=self.start+self.blockStarts[i]+self.blockSizes[i]
       id=self.id+"_Exon_"+str(j)
       j+=step
-      a.append(Bed6((self.chr,start,end,id,self.score,self.strand)))
+      a.append(bed6((self.chr,start,end,id,self.score,self.strand)))
     if self.strand=="-":
       return a[::-1]
     else:
@@ -262,7 +262,7 @@ class Bed12(Bed6):
       end=self.start+self.blockStarts[i+1]
       id=self.id+"_Intron_"+str(j)
       j+=step
-      a.append(Bed6((self.chr,start,end,id,self.score,self.strand)))
+      a.append(bed6((self.chr,start,end,id,self.score,self.strand)))
     if self.strand=="-":
       return a[::-1]
     else:
@@ -353,73 +353,73 @@ class Bed12(Bed6):
     else:
       return False
 
-def bed3Iter(file, bin = False):
+def bed3_iter(file, bin = False):
   for l in file:
     try:
-      yield Bed3(l, bin)
+      yield bed3(l, bin)
     except ValueError:
       pass
 
 
-def bed6Iter(file, bin = False):
+def bed6_iter(file, bin = False):
   for l in file:
     try:
-      yield Bed6(l, bin)
+      yield bed6(l, bin)
     except ValueError:
       pass
 
-def bed12Iter(file, bin = False):
+def bed12_iter(file, bin = False):
   for l in file:
     try:
-      yield Bed12(l, bin)
+      yield bed12(l, bin)
     except ValueError:
       pass
 
-class refGene(Bed12):
+class refGene(bed12):
   def __init__(self, x):
     l = x.strip().split('\t')
-    self.exonStarts = comTotup(l[9])
-    self.exonEnds = comTotup(l[10])
+    self.exonStarts = com2tup(l[9])
+    self.exonEnds = com2tup(l[10])
     start = int(l[4])
     blockSizes = [self.exonEnds[i] - self.exonStarts[i] for i in range(len(self.exonStarts))]
     blockStarts = [self.exonStarts[i] - start for i in range(len(self.exonStarts))]
-    l2 = [l[2],l[4],l[5],l[1],l[11],l[3],l[6],l[7],'0',l[8],tupTocom(blockSizes),tupTocom(blockStarts)]
-    Bed12.__init__(self, l2)
+    l2 = [l[2],l[4],l[5],l[1],l[11],l[3],l[6],l[7],'0',l[8],tup2com(blockSizes),tup2com(blockStarts)]
+    bed12.__init__(self, l2)
     self.bin = int(l[0])
     self.name2 = l[12]
-    self.exonFrames = comTotup(l[15])
+    self.exonFrames = com2tup(l[15])
     self.cdsStartStat = l[13]
     self.cdsEndStat = l[14]
     
   def __repr__(self): 
     return 'refGene object:\n'+str(self)+'\n'
     
-def refGeneIter(file):
+def refGene_iter(file):
   for l in file:
     try:
       yield refGene(l)
     except ValueError:
       pass
     
-def refFlatIter(file):
+def refFlat_iter(file):
   for l in file:
     lst = l.strip().split()
-    starts = comTotup(lst[9])
-    stops = comTotup(lst[10])
+    starts = com2tup(lst[9])
+    stops = com2tup(lst[10])
     st1 = tuple(map(lambda x: x - int(lst[4]), starts))
     sizes = tuple(map(lambda x, y: y - x, starts, stops))
     lstb = [lst[2],lst[4],lst[5],lst[1],lst[0],lst[3],lst[6],lst[7],"0,0,0",lst[8],sizes,st1]
-    bed = Bed12(lstb)
+    bed = bed12(lstb)
     bed.gid = bed.score ##
     yield bed
     
-def shortBed(s, name = ''): #like chr1:1-200:+
+def short_bed(s, name = ''): #like chr1:1-200:+
   lst = s.strip().split(":")
   l1 = lst[1].split("-")
   if name == "": name = s.strip()
   if len(lst) >= 3: strand = lst[2]
   else: stand = '.'
-  return Bed6([lst[0], l1[0], l1[1], name, 0, strand])
+  return bed6([lst[0], l1[0], l1[1], name, 0, strand])
 
 def sub(a, b): # a - b
   if a.chr != b.chr : return [a]

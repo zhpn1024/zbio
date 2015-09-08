@@ -24,12 +24,12 @@ def first(arr):
   for i in range(l):
     f[i] /= c
   return f
-def firstFrames(arr, bin = 3):
+def first_frames(arr, bin = 3):
   fs = []
   for i in range(0, len(arr), bin):
     fs.append(first(arr[i:i+bin])) # May out of index
   return fs
-def frameMean(fs):
+def frame_mean(fs):
   l = len(fs[0])
   f = [0] * l
   c = 0
@@ -42,19 +42,19 @@ def frameMean(fs):
   if c > 0 : 
     for j in range(l): f[j] /= c
   return f
-def frameTestN(arr, length, value, bin = 3, n = 1000, show = False): #expect no bias
+def frame_test_n(arr, length, value, bin = 3, n = 1000, show = False): #expect no bias
   a = arr[:]
   c = 0
   for i in range(n):
     random.shuffle(a)
-    fs = firstFrames(a[0:length], bin)
-    f = frameMean(fs)
+    fs = first_frames(a[0:length], bin)
+    f = frame_mean(fs)
     if max(f) >= value: c += 1
     if show : print a, fs, f, c
     if i == 19 and c > 10 : return float(c) / 20
     if i == 99 and c > 20 : return float(c) / 100
   return float(c) / n
-def frameTestE(arr, length, value, expect, bin = 3, n = 1000, show = False):
+def frame_test_e(arr, length, value, expect, bin = 3, n = 1000, show = False):
   a = arr[0:len(arr)]
   c = 0
   af = []
@@ -72,7 +72,7 @@ def frameTestE(arr, length, value, expect, bin = 3, n = 1000, show = False):
       for j in range(bin):
         ff.append(af[j][i])
       fs.append(first(ff))
-    f = frameMean(fs)
+    f = frame_mean(fs)
     m = max(f)
     if f[expect] < m and m >= value : c += 1
     if show : print fs, f, c
@@ -84,7 +84,7 @@ def bias(f):
   for i in range(len(f)):
     if f[i] == m : return i
   
-def orfRead(cnts, cds1, cds2, nhead = 12, ntail = 18):
+def orf_read(cnts, cds1, cds2, nhead = 12, ntail = 18):
   all1 = nhead
   all2 = len(cnts) - ntail
   if cds1 < all1 : cds1 = all1
@@ -97,9 +97,9 @@ def orfRead(cnts, cds1, cds2, nhead = 12, ntail = 18):
     if cds1 <= i < cds2 : rcds += cnts[i]
   return rall, rcds, all2-all1, cds2-cds1
 
-class Region:
+class region:
   def __init__(self, ers, start, stop, n, score = -1, p = 1):
-    self.ers = ers # corrent enrichedRegions object
+    self.ers = ers # corrent enrichedregions object
     self.start = start #binned 
     self.stop = stop
     self.n = n
@@ -113,11 +113,11 @@ class Region:
   def __len__(self): 
     return self.stop - self.start
   def copy(self):
-    return Region(self.ers, self.start, self.stop, self.n, self.score, self.p)
+    return region(self.ers, self.start, self.stop, self.n, self.score, self.p)
   def __str__(self):
     return "%d-%d n=%d score=%s p=%s" % (self.start, self.stop, self.n, str(self.score), str(self.p))
   def __repr__(self):
-    return "Enriched Region object " + str(self)
+    return "Enriched region object " + str(self)
   def mapback(self, start = -1, stop = -1, nhead = -1, bin = -1):
     if nhead < 0 : nhead = self.ers.nhead
     if bin < 0 : bin = self.ers.bin
@@ -126,19 +126,19 @@ class Region:
     start = start * bin + nhead
     stop = stop * bin + nhead
     return start, stop
-  def binomPval(self, l = -1):
+  def binom_pvalue(self, l = -1):
     p = float(len(self))/self.ers.length
     if l > 0: p2 = float(len(self))/l
     else : p2 = p
     #print self.n, p
     return stat.binom_test(self.n, self.ers.total, p) / p2
   
-  def getFrame(self, start = -1, stop = -1):
+  def get_frame(self, start = -1, stop = -1):
     if start < 0 : start = self.start 
     if stop < 0 : stop = self.stop
-    f = frameMean(self.ers.frames[start:stop])
+    f = frame_mean(self.ers.frames[start:stop])
     return f
-  def localPos(self, r, window = 20):
+  def local_pos(self, r, window = 20):
     l = len(self)
     rs = int(r * l - window / 2)
     re = rs + window
@@ -152,12 +152,12 @@ class Region:
     re += self.start
     return (rs, re)
   
-  def frameCheck(self, n = 1000, window = 20, local = [0.0,0.5,1.0]):
-    f = self.getFrame(self.start, self.stop)
+  def frame_check(self, n = 1000, window = 20, local = [0.0,0.5,1.0]):
+    f = self.get_frame(self.start, self.stop)
     fm = max(f)
     tstart, tstop = self.mapback()
-    p = frameTestN(self.ers.cnts[tstart:tstop], tstop-tstart, fm, self.ers.bin, n = n)
-    #print "Region frame:",
+    p = frame_test_n(self.ers.cnts[tstart:tstop], tstop-tstart, fm, self.ers.bin, n = n)
+    #print "region frame:",
     if p < 0.05 : 
       b = bias(f)
       #print "Bias =", b, "p =", p, "f =", f
@@ -167,22 +167,22 @@ class Region:
     l = len(self)
     if l > window :
       for r in local:
-        (rs, re) = self.localPos(r, window)
+        (rs, re) = self.local_pos(r, window)
         (ts, te) = self.mapback(rs, re)
-        rf = self.getFrame(rs, re)
+        rf = self.get_frame(rs, re)
         rfm = max(rf)
         rb = bias(rf)
         if p < 0.05 : 
           if round(rfm, 3) == round(rf[b], 3) : continue
-          rpn = frameTestN(self.ers.cnts[ts:te], te-ts, rfm, self.ers.bin, n = n)
+          rpn = frame_test_n(self.ers.cnts[ts:te], te-ts, rfm, self.ers.bin, n = n)
           if rpn < 0.05 :
-            rpe = frameTestE(self.ers.cnts[tstart:tstop], te-ts, rfm, b, self.ers.bin, n = n)
+            rpe = frame_test_e(self.ers.cnts[tstart:tstop], te-ts, rfm, b, self.ers.bin, n = n)
           else : rpe = 1
           rp = max(rpn, rpe)
           if rp < 0.05 : tp = '1-1'
           else : tp = '1-0'
         else: 
-          rp = frameTestN(self.ers.cnts[ts:te], te-ts, rfm, self.ers.bin, n = n)
+          rp = frame_test_n(self.ers.cnts[ts:te], te-ts, rfm, self.ers.bin, n = n)
           if rp < 0.05 : tp = '0-1'
           else : tp = '0-0'
         if rp < 0.05 : 
@@ -190,7 +190,7 @@ class Region:
           locbias[r] = (rf, rp)
     return (regbias, locbias)
 
-class enrichedRegions:
+class enrichedregions:
   def __init__(self, cnts, nhead = 12, ntail = 18, bin = 3, log = True):
     self.cnts = cnts
     self.nhead = nhead
@@ -231,10 +231,10 @@ class enrichedRegions:
     if pos > self.length: return None
     return pos * self.bin + self.nhead
   
-  def findRegion(self):
+  def find_region(self):
     if self.total == 0 : raise StopIteration
     rarr = []
-    rmax = Region(self, 0, 1, 0, 0)
+    rmax = region(self, 0, 1, 0, 0)
     #print self.rStarts, self.rStops
     for bi1 in self.rStarts:
       s = 0
@@ -246,8 +246,8 @@ class enrichedRegions:
           s += self.bins[bi]
         d = bi2 - bi1
         score = float(s) / self.total - float(d) / self.length
-        r = Region(self, bi1, bi2, s, score)
-        if score > 0 : r.p = r.binomPval()
+        r = region(self, bi1, bi2, s, score)
+        if score > 0 : r.p = r.binom_pvalue()
         rarr[-1].append(r)
         if rmax < r : rmax = r
         lasti2 = bi2
@@ -259,7 +259,7 @@ class enrichedRegions:
           if rmax.overlap(r): 
             r.score = -1
             r.p = 1
-      rmax = Region(self, 0, 1, 0, 0)
+      rmax = region(self, 0, 1, 0, 0)
       for rarr2 in rarr:
         for r in rarr2:
           if rmax < r : rmax = r

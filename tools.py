@@ -59,7 +59,7 @@ def end3(A):
     return A.stop
 
 
-def faIter(file):
+def fa_iter(file):
   id = sq = ""
   for l in file:
     l = l.strip()
@@ -73,7 +73,7 @@ def faIter(file):
       sq += l.replace('U','T').replace('u','t')
   yield (id,sq)
 
-def coverIter(bedIter, weight= lambda x: 1): 
+def cover_iter(bedIter, weight= lambda x: 1): 
   current = []
   chr = ""
   start = 0
@@ -153,7 +153,7 @@ def coverIter(bedIter, weight= lambda x: 1):
     current[0:i] = []
     clen = len(current)
     
-def overlapIter(bedIterA, bedIterB, func=overlap, ignoreStrand = True, counts = [0,0]): ### Need Revise!!
+def overlap_iter(bedIterA, bedIterB, func=overlap, ignoreStrand = True, counts = [0,0]): ### Need Revise!!
   lst = []
   ac = bedIterA.next()
   counts[0] += 1
@@ -204,7 +204,7 @@ def overlapIter(bedIterA, bedIterB, func=overlap, ignoreStrand = True, counts = 
     if c == 0 : Aend = True
     #print len(lst)
 
-def randOverlapIter(bedIterA, bedListB, func=overlap, ignoreStrand = True): # ListB should have no overlap
+def rand_overlap_iter(bedIterA, bedListB, func=overlap, ignoreStrand = True): # ListB should have no overlap
   m = len(bedListB)
   for a in bedIterA:
     i0 = 0
@@ -233,7 +233,7 @@ def randOverlapIter(bedIterA, bedListB, func=overlap, ignoreStrand = True): # Li
       #else : 
         #print 'i1', ignoreStrand, a,id, a.strand, bedListB[i1].id, bedListB[i1].strand
 
-def findOverlap(q, lst, func=overlap, ignoreStrand = True): # List should have no overlap
+def find_overlap(q, lst, func=overlap, ignoreStrand = True): # List should have no overlap
   m = len(lst)
   i0 = 0
   i1 = m-1
@@ -249,7 +249,7 @@ def findOverlap(q, lst, func=overlap, ignoreStrand = True): # List should have n
       return i1
   return -1
 
-def bed2Seq(seq, bed):
+def bed2seq(seq, bed):
   s = ''
   for e in bed.exons:
     es = seq[e.start:e.stop]
@@ -258,7 +258,7 @@ def bed2Seq(seq, bed):
     s += es
   return s
 
-def gtf2Seq(seq, gtftrans):
+def gtf2seq(seq, gtftrans):
   s = ''
   #gtftrans.exons.sort()
   #if gtftrans.strand == '-':
@@ -305,7 +305,7 @@ def genome_pos(trans, p, bias = 0):
       p1 -= len(e)
   return None
 
-def nonOverlapLists(lst):
+def non_overlap_lists(lst):
   nolists=[]
   for b in lst:
     f = False
