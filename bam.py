@@ -5,6 +5,12 @@ import bed
 class bamfile(pysam.Samfile):
   def __repr__(self):
     return 'pysam.Samfile '+self.filename
+  def fetch_reads(self, chr, start, stop, multiple_iterators=False):
+    if chr not in self.references : raise StopIteration
+    rds = self.fetch(reference=chr, start=start, end=stop, multiple_iterators=multiple_iterators)
+    for read in rds:
+      r = bam(read, bamfile)
+      yield r
 
 class bam():#AlignedRead
   

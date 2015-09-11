@@ -56,6 +56,8 @@ class exon:
     return sub(self, other)
   def intersect(self, other):
     return intersect(self, other)
+  def union(self, other):
+    return union(self, other)
     
 def attr(s, gff = False):
   if type(s) == dict: return s
@@ -211,6 +213,23 @@ class gtfgene(exon):
       t.check()
       if t.start < self.start: self.start = t.start
       if t.stop > self.stop: self.stop = t.stop
+  def merge_trans(self):
+    es = []
+    merge = gtftrans(self.lst)
+    for t in self.trans:
+      es += t.exons
+    es.sort()
+    me = es[0]
+    for i in range(1, len(es)):
+      if me.stop >= es[i].start:
+        me = union(me, es[i])[0]
+      else: 
+        merge.add_exon(me)
+        me = es[i]
+    merge.add_exon(me)
+    merge.check()
+    return merge
+      
     
 def load_gtf(fin, filt = [], gff = False):
   genes = {}
@@ -404,4 +423,9 @@ def intersect(a, b): # a & b
   if a.start >= b.stop or a.stop <= b.start : return out
   out.append(a(start = max(a.start, b.start), stop = min(a.stop, b.stop)))
   return out
+
+def union(a, b): # a U b
+  if a.chr != b.chr or a.start > b.stop or a.stop < b.start :
+    return [a, b]
+  return [a(start = min(a.start, b.start), stop = max(a.stop, b.stop))]
 

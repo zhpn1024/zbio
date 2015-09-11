@@ -274,7 +274,7 @@ class ztnb(negbinom):
   def expected_zeros(self, size):
     p0 = negbinom.pmf(self, 0)
     return size * p0 / (1 - p0)
-  def estimate(self, data, max_iter = 1e4, nlike = 10):
+  def estimate(self, data, max_iter = 1e4, nlike = 10, report = False):
     total, cnt = data_count(data)
     lastllh = 0
     i = 0
@@ -289,7 +289,7 @@ class ztnb(negbinom):
       llh = self.log_likelihood(data)
       d = abs(2 * (llh - lastllh) / (llh + lastllh) / nlike)
       if d < self.Delta : break
-      print d, llh, self.r, self.p, ez
+      if report : print d, llh, self.r, self.p, ez
       lastllh = llh
     return self.r, self.p
   def pvalue(self, k = 1):

@@ -76,6 +76,8 @@ class bed3:
     return sub(self, other)
   def intersect(self, other):
     return intersect(self, other)
+  def union(self, other):
+    return union(self, other)
   def headerline(self,sep='\t'):# Header string, fit all bed
     sep=str(sep)
     return sep.join(self.Header)
@@ -435,6 +437,11 @@ def intersect(a, b): # a & b
   if a.start >= b.stop or a.stop <= b.start : return out
   out.append(a(start = max(a.start, b.start), stop = min(a.stop, b.stop)))
   return out
+
+def union(a, b): # a U b
+  if a.chr != b.chr or a.start > b.stop or a.stop < b.start :
+    return [a, b]
+  return [a(start = min(a.start, b.start), stop = max(a.stop, b.stop))]
 
 def test():
   return 1
