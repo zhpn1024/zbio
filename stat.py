@@ -204,7 +204,18 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
   def pmf(self, k = 0):
     return nbinom.pmf(k, self.r, self.p)
   def pvalue(self, k = 0):
-    return 1 - nbinom.cdf(k-1, self.r, self.p)
+    p = 1 - nbinom.cdf(k-1, self.r, self.p)
+    if p > self.Delta : return p
+    p = nbinom.pmf(k, self.r, self.p)
+    ka = k + 1
+    pa = nbinom.pmf(ka, self.r, self.p)
+    while pa / p > self.Delta:
+      p += pa
+      ka += 1
+      pa = nbinom.pmf(ka, self.r, self.p)
+    p += pa
+    return p
+      
   def estimate(self, data): #data dict value:counts
     total, cnt = data_count(data)
     rmax, rmin = self.rMax, self.rMin
