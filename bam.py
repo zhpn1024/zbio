@@ -9,7 +9,7 @@ class bamfile(pysam.Samfile):
     if chr not in self.references : raise StopIteration
     rds = self.fetch(reference=chr, start=start, end=stop, multiple_iterators=multiple_iterators)
     for read in rds:
-      r = bam(read, bamfile)
+      r = bam(read, self)
       yield r
 
 class bam():#AlignedRead
@@ -24,6 +24,7 @@ class bam():#AlignedRead
   
   @property
   def chr(self): 
+    #print self.ref['chr1']
     return self.ref[self.read.tid]
   @property
   def start(self):
