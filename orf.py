@@ -10,7 +10,7 @@ antiframe = [-1, -2, -3]
 frame = [1, 2, 3, -1, -2, -3]
 
 class orf:
-  def __init__(self, lst = [], frame = 0, stop = -1):
+  def __init__(self, lst = [], frame = 0):
     if len(lst) != 0:
       #lst = l.strip().split('\t')
       self.frame = int(lst[0])
@@ -33,6 +33,11 @@ class orf:
     return len(self.starts) + len(self.altstarts) > 0
   def has_stop(self):
     return self.stop >= 0
+  def __len__(self):
+    if not self.is_complete() : return 0
+    return self.stop - self.start
+  def __cmp__(self, other):
+    return cmp(len(self), len(other)) or cmp(self.start,other.start)
   @property
   def start(self):
     return min(self.starts + self.altstarts)
@@ -78,20 +83,25 @@ def allorf(seq, strand = '+') :
     else: 
       s = antiseq
       fa = -f
-    orf = orf(frame = f)
+    o = orf(frame = f)
     for i in range(fa-1, length, codonSize):
       try: codon = s[i:i+codonSize]
       except: break
       if codon in cstart:
-        orf.starts.append(i)
+        o.starts.append(i)
       elif codon in cstartlike:
-         orf.altstarts.append(i)
+         o.altstarts.append(i)
       elif codon in cstop:
-        orf.stop = i + codonSize
-        if orf.has_start():
-          yield orf
-          orf = orf(frame = f)
-
+        o.stop = i + codonSize
+        if o.has_start():
+          yield o
+          o = orf(frame = f)
+def orflist(seq, strand = '+', sort = True):
+  ol = []
+  for o in allorf(seq, strand = strand):
+    ol.append(o)
+  if sort : ol.sort(reverse = True)
+  return ol
 def findorf(seq, strand = '+', altcstart = False) :
   seq = seq.upper().replace('U','T')
   if strand == '+' : fr = senseframe

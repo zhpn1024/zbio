@@ -1,5 +1,155 @@
-import random
-from zbio import stat
+import random, numpy, math
+from zbio import stat, bam, gtf
+from scipy.stats import ranksums, mannwhitneyu
+
+maxNH = 5
+minMapQ = 1 
+minTransLen = 50
+nhead, ntail = 12, 18
+bin = 3
+offset = {}
+for i in range(26,35):
+  offset[i] = 12
+  
+def bin_counts(arr, bin = bin):
+  l = len(arr)
+  lb = l / bin
+  barr = [0] * lb
+  for i in range(lb):
+    p = i * bin
+    barr[i] = sum(arr[p:(p+bin)])
+  return barr
+def rstest(x, y): # p value of x > y
+  st1, p1 = ranksums(x, y)
+  st, p = mannwhitneyu(x, y)
+  if st1 > 0 : return p
+  else: return 1 - p ###
+class ribo: #ribo seq profile in transcript
+  def __init__(self, trans, ribobam, offset = offset, compatible = True, mis = 2):
+    self.length = trans.cdna_length()
+    self.cnts = [0] * self.length
+    self.nhead = nhead
+    self.ntail = ntail
+    self.bin = bin
+    self.total = 0
+    for r in ribobam.fetch_reads(trans.chr, trans.start, trans.stop):
+      if r.strand != trans.strand : continue ## Must be the same strand?
+      if r.read.get_tag('NH') > maxNH : continue
+      if r.read.mapping_quality < minMapQ : continue
+      if compatible : c = r.is_compatible(trans, mis = mis)
+      else: c = r.is_inside(trans, mis = mis)
+      if not c : continue ## 
+      l = r.cdna_length()
+      if l not in offset: continue
+      i = trans.cdna_pos(r.genome_pos(offset[l]))
+      if i is None : continue
+      #if i not in self.cnts: self.cnts[i] = 0
+      self.cnts[i] += 1
+      self.total += 1
+    #if total == 0 : continue
+  def abdscore(self, norm = 1000):
+    return math.log(float(self.total) / (self.length - 30) * norm)
+  def enrich_test(self, start, stop):
+    inarr = self.cnts[start:stop]
+    outarr = self.cnts[self.nhead:start] + self.cnts[stop:self.length-ntail]
+    if len(outarr) <= 0: return None
+    inbc = bin_counts(inarr)
+    outbc = bin_counts(outarr)
+    p = rstest(inbc, outbc)
+    return p
+  def frame_test(self, start, stop):
+    l = (stop - start) / bin
+    inarr = [0] * l
+    outarr = [0] * 2 * l
+    for i in range(l):
+      p = start + i * bin
+      inarr[i] = self.cnts[p]
+      outarr[i*2] = self.cnts[p + 1]
+      outarr[i*2 + 1] = self.cnts[p + 2]
+    p = rstest(inarr, outarr)
+    return p
+  def tis_test(self, start, r, p):
+    zt = stat.ztnb(r, p)
+    p = zt.pvalue(self.cnts[start])
+    return p
+  def is_summit(self, p, flank = 1):
+    if p < nhead or p > self.length - ntail: return False
+    for i in range(1, flank + 1):
+      if self.cnts[p] < self.cnts[p + i]: return False
+      if self.cnts[p] < self.cnts[p - i]: return False
+    return True
+  def cnts_dict(self):
+    cd = {}
+    for i in range(nhead, len(self.cnts) - ntail):
+      if self.cnts[i] > 0 : cd[i] = self.cnts[i]
+    return cd
+
+#### For tis
+def pidx(value, lst, parts):
+  l = len(lst) - 1
+  for i in range(len(parts)):
+    if lst[int(l * parts[i])] >= value : break
+  return i
+def pidx_uplim(i, lst, parts):
+  l = len(lst) - 1
+  return sl[int(l * parts[i])]
+
+def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50):
+  parts.sort()
+  if parts[-1] < 1 : parts.append(1)
+  bamfile = bam.bamfile(bampath, "rb")
+  gtffile = open(gtfpath, 'r')
+  fulldata, genes, sl = {}, [], []
+  data = []
+  for i in range(len(parts)):
+    data.append({})
+  for g in gtf.gtfgene_iter(gtffile):
+    merge = g.merge_trans()
+    ml = merge.cdna_length()
+    if ml < minTransLen : continue ##
+    mcds1, mcds2 = [], []
+    for t in g.trans:
+      cds1, cds2 = t.cds_start, t.cds_stop
+      if cds1 is not None : mcds1.append(merge.cdna_pos(cds1))
+      if cds2 is not None : mcds2.append(merge.cdna_pos(cds2))
+    mtis = ribo(merge, bamfile, offset = offset, compatible = False)
+    if mtis.total == 0 : continue
+    score = mtis.abdscore()
+    sl.append(score)
+    fulldata[g.id] = mtis.cnts_dict(), score, mcds1, mcds2
+    genes.append(merge)
+  sl.sort()
+  print 'Group data...'
+  for m in genes:
+    cnts, score, mcds1, mcds2 = fulldata[m.gid]
+    ip = pidx(score, sl, parts)
+    if whole : start = nhead ##
+    elif len(mcds2) > 0: start = max(mcds2) ##The last stop codon
+    else : continue ##
+    for i in range(start, ml - 18):
+      if i in mcds1: continue
+      if i not in cnts: continue # ignore 0s
+      if cnts[i] not in data[ip]:
+        data[ip][cnts[i]] = 0
+      data[ip][cnts[i]] += 1
+      
+  print 'Estimate ZTNB parameters...'
+  paras = []
+  l = len(sl) - 1
+  ip = 0
+  for da in data:
+    d = {}
+    for i in range(maxcnt): ## max range 
+      if i in da: d[i] = da[i]
+    zt = stat.ztnb()
+    zt.estimate(d, max_iter=10000)#, nlike=100)
+    paras.append((zt.r, zt.p))
+    #print >>estfile, zt.r, zt.p, sl[int(l * parts[ip])], d
+    ip += 1
+  gtffile.close()
+  bamfile.close()
+  return paras, sl, data
+
 
 def intlog2(r):
   i = 0

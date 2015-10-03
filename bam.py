@@ -184,7 +184,13 @@ class bam():#AlignedRead
           if m > mis : return False
         i += 1
     return True
-    
+  def is_inside(self, trans, mis = 0):
+    l = self.cdna_length()
+    al = 0
+    for e in trans.exons:
+      al += self.read.get_overlap(e.start, e.stop)
+    if l - al > mis : return False ## 
+    else: return True
 def compatible_bam_iter(bamfile, trans, mis = 0, sense = True):
   if trans.chr not in bamfile.references : raise StopIteration
   rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
