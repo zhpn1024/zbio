@@ -10,7 +10,7 @@ antiframe = [-1, -2, -3]
 frame = [1, 2, 3, -1, -2, -3]
 
 class orf:
-  def __init__(self, lst = [], frame = 0):
+  def __init__(self, lst = [], frame = 0, stop = -1):
     if len(lst) != 0:
       #lst = l.strip().split('\t')
       self.frame = int(lst[0])

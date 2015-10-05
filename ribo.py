@@ -92,7 +92,7 @@ def pidx(value, lst, parts):
   return i
 def pidx_uplim(i, lst, parts):
   l = len(lst) - 1
-  return sl[int(l * parts[i])]
+  return lst[int(l * parts[i])]
 
 def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50):
   parts.sort()
