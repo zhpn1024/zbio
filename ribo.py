@@ -7,9 +7,11 @@ minMapQ = 1
 minTransLen = 50
 nhead, ntail = 12, 18
 bin = 3
-offset = {}
-for i in range(26,35):
-  offset[i] = 12
+#offset = {}
+#for i in range(26,35):
+  #offset[i] = 12
+def offset(length = 30):
+  return 12
   
 def bin_counts(arr, bin = bin):
   l = len(arr)
@@ -40,8 +42,10 @@ class ribo: #ribo seq profile in transcript
       else: c = r.is_inside(trans, mis = mis)
       if not c : continue ## 
       l = r.cdna_length()
-      if l not in offset: continue
-      i = trans.cdna_pos(r.genome_pos(offset[l]))
+      #if l not in offset: continue
+      loff = offset(l)
+      if l is None: continue
+      i = trans.cdna_pos(r.genome_pos(loff))
       if i is None : continue
       #if i not in self.cnts: self.cnts[i] = 0
       self.cnts[i] += 1
@@ -74,6 +78,7 @@ class ribo: #ribo seq profile in transcript
     return p
   def is_summit(self, p, flank = 1):
     if p < nhead or p > self.length - ntail: return False
+    if self.cnts[p] == 0: return False
     for i in range(1, flank + 1):
       if self.cnts[p] < self.cnts[p + i]: return False
       if self.cnts[p] < self.cnts[p - i]: return False
@@ -94,7 +99,7 @@ def pidx_uplim(i, lst, parts):
   l = len(lst) - 1
   return lst[int(l * parts[i])]
 
-def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50):
+def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50, skip_tis = True):
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
   bamfile = bam.bamfile(bampath, "rb")
@@ -127,7 +132,7 @@ def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset
     elif len(mcds2) > 0: start = max(mcds2) ##The last stop codon
     else : continue ##
     for i in range(start, ml - 18):
-      if i in mcds1: continue
+      if skip_tis and i in mcds1: continue
       if i not in cnts: continue # ignore 0s
       if cnts[i] not in data[ip]:
         data[ip][cnts[i]] = 0

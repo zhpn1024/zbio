@@ -1,5 +1,5 @@
 import math
-from scipy.stats import nbinom, chisquare
+from scipy.stats import nbinom, chisquare, chisqprob
 logarr = [None]
 def logarr_ext(n, logarr = logarr):
   l = len(logarr)
@@ -29,6 +29,13 @@ def load_data(arr):
     if k not in data : data[k] = 0
     data[k] += 1
   return data
+def fisher_method(ps):
+  n = len(ps)
+  fs = 0
+  for p in ps:
+    fs += - 2 * math.log(p)
+  fp = chisqprob(fs, 2 * n)
+  return fp, fs
 
 def hypergeo0(N, K, n, k):
   p = 1.0
