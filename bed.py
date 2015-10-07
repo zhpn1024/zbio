@@ -84,11 +84,11 @@ class bed3:
   def head(self,n=10): #Bed3 only
     if n>len(self):
       n=len(self)
-    return Bed3([self.chr,self.start,self.start+n])
+    return bed3([self.chr,self.start,self.start+n])
   def tail(self,n=10): #Bed3 only
     if n>len(self):
       n=len(self)
-    return Bed3([self.chr,self.stop-n,self.stop])
+    return bed3([self.chr,self.stop-n,self.stop])
   def __call__(self,**args): #New bed that modified from self. All bed
     cp=self.bed()
     if args=={}:
@@ -139,7 +139,7 @@ class bed6(bed3):
     return self.items[5]
   
   def bed(self): #Only Bed6
-    return Bed6(self)
+    return bed6(self)
   
   def head(self, n=10): #Bed6 and Bed12
     if n>len(self):

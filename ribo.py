@@ -36,7 +36,8 @@ class ribo: #ribo seq profile in transcript
     self.total = 0
     for r in ribobam.fetch_reads(trans.chr, trans.start, trans.stop):
       if r.strand != trans.strand : continue ## Must be the same strand?
-      if r.read.get_tag('NH') > maxNH : continue
+      try: 
+        if r.read.get_tag('NH') > maxNH : continue
       if r.read.mapping_quality < minMapQ : continue
       if compatible : c = r.is_compatible(trans, mis = mis)
       else: c = r.is_inside(trans, mis = mis)
