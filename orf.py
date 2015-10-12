@@ -138,4 +138,18 @@ def findorf(seq, strand = '+', altcstart = False) :
             yield length - orfstop, length - orfstart, f, orflen
           orfstart = orfstop = -1
           
-          
+def orfdict(orflist, alt = True):
+  od = {}
+  for o in orflist:
+    for s in o.starts:
+      od[s] = o.stop
+    if alt:
+      for s in o.altstarts:
+        od[s] = o.stop
+  return od
+def nearest_start(s, od, flank = 1):
+  if s in od: return s
+  for i in range(1, flank + 1):
+    if s + i in od : return s + i ###
+    if s - i in od : return s - i
+  return None
