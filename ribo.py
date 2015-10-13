@@ -116,9 +116,9 @@ def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset
     if ml < minTransLen : continue ##
     mcds1, mcds2 = [], []
     for t in g.trans:
-      cds1, cds2 = t.cds_start, t.cds_stop
-      if cds1 is not None : mcds1.append(merge.cdna_pos(cds1))
-      if cds2 is not None : mcds2.append(merge.cdna_pos(cds2))
+      cds1, cds2 = t.cds_start(cnda = True), t.cds_stop(cnda = True)
+      if cds1 is not None : mcds1.append(cds1)
+      if cds2 is not None : mcds2.append(cds2)
     mtis = ribo(merge, bamfile, offset = offset, compatible = False)
     if mtis.total == 0 : continue
     score = mtis.abdscore()

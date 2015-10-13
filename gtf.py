@@ -117,22 +117,26 @@ class gtftrans(exon):
       if e.stop > self.stop: self.stop = e.stop
     self.exons.sort(reverse = self.is_reverse())
     self.cds.sort(reverse = self.is_reverse())
-  @property
-  def cds_start(self): 
+  #@property
+  def cds_start(self, cnda = False): 
     if self.start_codon is None : return None
-    return self.genome_pos(self.cdna_pos(self.start_codon.end3) - 3, 1)
-  @property
-  def cds_stop(self):
+    cs = self.cdna_pos(self.start_codon.end3) - 3
+    if cnda : return cs
+    else : return self.genome_pos(self.cdna_pos(self.start_codon.end3) - 3, 1)
+  #@property
+  def cds_stop(self, cnda = False):
     if self.stop_codon is None : return None
-    return self.genome_pos(self.cdna_pos(self.stop_codon.end5) + 3, 0)
+    cs = self.cdna_pos(self.stop_codon.end5) + 3
+    if cdna : return cs
+    else : return self.genome_pos(self.cdna_pos(self.stop_codon.end5) + 3, 0)
   @property
   def thick_start(self):
-    if self.is_reverse(): return self.cds_stop
-    else : return self.cds_start
+    if self.is_reverse(): return self.cds_stop()
+    else : return self.cds_start()
   @property
   def thick_stop(self):
-    if self.is_reverse(): return self.cds_start
-    else : return self.cds_stop
+    if self.is_reverse(): return self.cds_start()
+    else : return self.cds_stop()
   def cdna_length(self): 
     l = 0
     for e in self.exons:
