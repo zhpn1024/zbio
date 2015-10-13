@@ -118,13 +118,13 @@ class gtftrans(exon):
     self.exons.sort(reverse = self.is_reverse())
     self.cds.sort(reverse = self.is_reverse())
   #@property
-  def cds_start(self, cnda = False): 
+  def cds_start(self, cdna = False): 
     if self.start_codon is None : return None
     cs = self.cdna_pos(self.start_codon.end3) - 3
-    if cnda : return cs
+    if cdna : return cs
     else : return self.genome_pos(self.cdna_pos(self.start_codon.end3) - 3, 1)
   #@property
-  def cds_stop(self, cnda = False):
+  def cds_stop(self, cdna = False):
     if self.stop_codon is None : return None
     cs = self.cdna_pos(self.stop_codon.end5) + 3
     if cdna : return cs
