@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('pdf')
 from matplotlib.pylab import *
 
 def plottrans(t, ypos, intv, r = [0.1, 0.3], color = 'blue',rid = -0.5):

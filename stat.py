@@ -33,6 +33,7 @@ def fisher_method(ps):
   n = len(ps)
   fs = 0
   for p in ps:
+    if p == 0 : return 0.0, -1 ###
     fs += - 2 * math.log(p)
   fp = chisqprob(fs, 2 * n)
   return fp, fs

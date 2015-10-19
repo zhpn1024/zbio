@@ -23,7 +23,8 @@ def bin_counts(arr, bin = bin):
   return barr
 def rstest(x, y): # p value of x > y
   st1, p1 = ranksums(x, y)
-  st, p = mannwhitneyu(x, y)
+  try : st, p = mannwhitneyu(x, y)
+  except : return 0.5
   if st1 > 0 : return p
   else: return 1 - p ###
 class ribo: #ribo seq profile in transcript
