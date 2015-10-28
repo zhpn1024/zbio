@@ -1,5 +1,5 @@
 import random, numpy, math
-from zbio import stat, bam, gtf
+from zbio import stat, bam, gtf, bed
 from scipy.stats import ranksums, mannwhitneyu
 
 maxNH = 5
@@ -35,6 +35,7 @@ class ribo: #ribo seq profile in transcript
     self.ntail = ntail
     self.bin = bin
     self.total = 0
+    self.trans = trans
     for r in ribobam.fetch_reads(trans.chr, trans.start, trans.stop):
       if r.strand != trans.strand : continue ## Must be the same strand?
       try: 
@@ -75,6 +76,37 @@ class ribo: #ribo seq profile in transcript
       outarr[i*2 + 1] = self.cnts[p + 2]
     p = rstest(inarr, outarr)
     return p
+  def orf_test(self, orflist): 
+    tid = self.trans.id
+    blanklist = [bed.bed3(tid, self.nhead, self.ntail)]
+    indeplist = []
+    result = []
+    for start, stop in orflist:
+      b = bed.bed3(tid, start, stop)
+      b.frame = start % 3
+      bl1 = [] #new blank list
+      ib = [] # overlap of b and blank
+      for blk in blanklist:
+        bl1 += blk - b #update blank list
+        ib += b.intersect(blk)
+      blanklist = bl1
+      pes = []
+      pes.append(self.enrich_testl(ib, blanklist)) ## to be added
+      pf = self.frame_test1(ib)
+      pes = [pe0]
+      for i in range(len(indeplist)):
+        idp1 = [] #new independent region for each orf
+        ovl = [] # overlap of b and independent region of orf[i]
+        for bidp in indeplist[i]:
+          idp1 += bidp - b
+          ovl += b.overlap(bidp)
+        if len(ovl) > 0: pes.append(self.enrich_testl(ovl, idp1))
+        indeplist[i] = idp1  
+      pe = stat.fisher_method(pes)
+      indeplist.append(ib)
+      result.append((pe, pf))
+    return result
+  
   def tis_test(self, start, r, p):
     zt = stat.ztnb(r, p)
     p = zt.pvalue(self.cnts[start])
@@ -91,6 +123,20 @@ class ribo: #ribo seq profile in transcript
     for i in range(nhead, len(self.cnts) - ntail):
       if self.cnts[i] > 0 : cd[i] = self.cnts[i]
     return cd
+  def top_summits(self, n = 10, minratio = 0, flank = 1):
+    slist = []
+    for i in range(len(self.cnts)):
+      if self.cnts[i] == 0 : continue
+      if not self.is_summit(i, flank = flank): continue
+      slist.append((i, self.cnts[i]))
+    l = len(slist)
+    if l <= 1 : return slist
+    slist.sort(key = lambda x: x[1], reverse = True)
+    minc = slist[0][1] * minratio
+    if minc <= 0 : return slist[0:n]
+    for i in range(l):
+      if slist[i][1] < minc : return slist[0:min(i,n)]
+    return slist[0:n]
 
 #### For tis
 def pidx(value, lst, parts):

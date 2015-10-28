@@ -102,6 +102,17 @@ def orflist(seq, strand = '+', sort = True):
     ol.append(o)
   if sort : ol.sort(reverse = True)
   return ol
+def orfs_by_pos(seq, pos): ### Unkown start codon, only to find stop codon
+  orfs = []
+  for f in range(codonSize):
+    for i in range(pos+f, length, codonSize):
+      try: codon = s[i:i+codonSize]
+      except: break
+      if codon in cstop: 
+        orfs.append(pos+f, i+codonSize)
+        break
+    if len(orfs) <= f : orfs.append(pos+f, i)
+  return orfs
 def findorf(seq, strand = '+', altcstart = False) :
   seq = seq.upper().replace('U','T')
   if strand == '+' : fr = senseframe
