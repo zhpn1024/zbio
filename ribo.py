@@ -148,7 +148,7 @@ def pidx_uplim(i, lst, parts):
   l = len(lst) - 1
   return lst[int(l * parts[i])]
 
-def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50, skip_tis = True):
+def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50, skip_tis = True, addchr = False):
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
   bamfile = bam.bamfile(bampath, "rb")
@@ -157,7 +157,7 @@ def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset
   data = []
   for i in range(len(parts)):
     data.append({})
-  for g in gtf.gtfgene_iter(gtffile):
+  for g in gtf.gtfgene_iter(gtffile, addchr = addchr):
     merge = g.merge_trans()
     ml = merge.cdna_length()
     if ml < minTransLen : continue ##
