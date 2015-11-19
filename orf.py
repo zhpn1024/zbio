@@ -174,7 +174,7 @@ codonTable = {'TTT':'F','TTC':'F','TTA':'L','TTG':'L', 'TCT':'S','TCC':'S','TCA'
 def translate(seq):
   aa = ""
   for i in range(0, len(seq), codonSize):
-    try : a = codonTable[seq[i:i+codonSize].upper()]
+    try : a = codonTable[seq[i:i+codonSize].upper().replace('U','T')]
     except : a = 'X'
     aa += a
   return aa
