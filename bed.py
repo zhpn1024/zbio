@@ -423,7 +423,7 @@ def short_bed(s, name = ''): #like chr1:1-200:+
   else: stand = '.'
   return bed6([lst[0], l1[0], l1[1], name, 0, strand])
 
-def exons2bed12(exons, id = 'exons_merge') : From exons to bed12
+def exons2bed12(exons, id = 'exons_merge') : #From exons to bed12
   exons.sort()
   chr, start, stop = exons[0].chr, exons[0].start, exons[-1].stop
   strand, score = exons[0].strand, exons[0].score
@@ -434,7 +434,7 @@ def exons2bed12(exons, id = 'exons_merge') : From exons to bed12
   for e in exons:
     blockSizes.append(len(e))
     blockStarts.append(e.start - start)
-  return bed12([chr, start, stop, id, score, strand, cds_start, cds_stop, itemRgb, tuple(blockSizes), tuple(blockStarts)])
+  return bed12([chr, start, stop, id, score, strand, cds_start, cds_stop, itemRgb, blockCount, tuple(blockSizes), tuple(blockStarts)])
 
 def sub(a, b): # a - b
   if a.chr != b.chr : return [a]

@@ -9,6 +9,8 @@ class exon:
     self.type = lst[2]
     self.attrstr = lst[8]
     self.attr = attr(lst[8], gff)
+    #except : 
+      #print "Format error:", self.attrstr
     self.gff = gff
     self.addchr = addchr
     self.frame = lst[7]
@@ -82,7 +84,9 @@ def attr(s, gff = False):
   for att in l:
     l2 = att.split(' ')
     #print att, l2
-    a[l2[0]] = eval(l2[1])
+    l21 = ' '.join(l2[1:])
+    a[l2[0]] = eval(l21)
+    #except : print l2[0]+'|'+l2[1]
   return a
   
 class gtftrans(exon):
