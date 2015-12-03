@@ -82,6 +82,7 @@ def attr(s, gff = False):
   a = {}
   #print l
   for att in l:
+    att = att.strip()
     l2 = att.split(' ')
     #print att, l2
     l21 = ' '.join(l2[1:])
