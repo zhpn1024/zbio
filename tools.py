@@ -19,8 +19,8 @@ def overlap(A, B):
   if A is overlapping with B.
   '''
   if(A.chr != B.chr) : return False
-  if (A.stop < B.start) : return False
-  if (B.stop < A.start) : return False
+  if (A.stop <= B.start) : return False
+  if (B.stop <= A.start) : return False
   return True
 
 def inside(A, B):

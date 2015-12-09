@@ -64,6 +64,7 @@ class bed3:
   def end3(self): #3' end, all bed
     if self.strand != '-' : return self.stop
     else : return self.start
+
   def is_reverse(self): #All bed
     return self.strand=='-'
   def bed(self): #Bed copy, Bed3 only
@@ -109,6 +110,10 @@ class bed3:
     l=[]
     l.append(self(id=self.id+"_Exon_1"))
     return l
+  @property
+  def introns(self): # No intron, empty
+    return []
+
   def is_contain(self,p): #if i in bed, all bed
     return self.start<=p<=self.stop
   def is_exon(self,p): #Bed3 and Bed6
@@ -120,6 +125,36 @@ class bed3:
   def cdna_pos(self,p): #Bed3 and Bed6
     if self.is_contain(p): return abs(p-self.end5)
     else: return None
+
+  def is_overlap(self, other):
+    if(self.chr != other.chr) : return False
+    if (self.stop <= other.start) : return False
+    if (other.stop <= self.start) : return False
+    return True
+
+  def is_compatible(self, other, ignoreStrand = False): # test needed
+    if not ignoreStrand :
+      if self.strand != other.strand : return False
+    if not self.is_overlap(other) : return True
+    start = max(self.start, other.start)
+    stop = min(self.stop, other.stop)
+    int1 = []
+    for i in self.introns:
+      if i.start <= start : return False
+      if i.stop >= stop : return False
+      int1.append(i)
+    int2 = []
+    for i in other.introns:
+      if i.stop <= start : continue
+      if i.start <= start : return False
+      if i.stop >= stop : return False
+      int2.append(i)
+    if len(int1) != len(int2) : return False
+    int1.sort()
+    int2.sort()
+    for i in range(len(int1)):
+      if int1[i] != int2[i] : return False
+    return True
 
 class bed6(bed3):
   Header=('chr','start','stop','id','score','strand')
@@ -168,7 +203,6 @@ class bed6(bed3):
   def is_upstream(self, other): #other is upstream of self
     if self.strand == '-' : return other.start >= self.stop
     else : return other.stop <= self.start
-  
 
 def com2tup(s): #comma string to tuple
   if type(s)==tuple: return s
