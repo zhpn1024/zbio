@@ -7,6 +7,7 @@ class exon:
     self.start = int(lst[3]) - 1
     self.stop = int(lst[4])
     self.type = lst[2]
+    self.score = lst[5]
     self.attrstr = lst[8]
     self.attr = attr(lst[8], gff)
     #except : 
@@ -39,6 +40,10 @@ class exon:
   @property
   def tid(self):
     try : return self.attr['transcript_id']
+    except : return ""
+  @property
+  def id(self):
+    try: return self.attr['exon_id']
     except : return ""
   @property
   def end5(self): #5' end, all bed

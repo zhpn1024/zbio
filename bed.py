@@ -9,6 +9,9 @@ class bed3:
       l = x.strip().split('\t')
       if bin:
         l[0:1] = []
+    elif type(x) == type(self) : 
+      l=[getattr(x, i) for i in self.Header]
+      #print l
     elif type(x)==dict:
       l=[x[i] for i in self.Header]
     else:
