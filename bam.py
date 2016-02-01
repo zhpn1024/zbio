@@ -77,7 +77,9 @@ class bam():#AlignedRead
   def end3(self): #3' end, all bed
     if self.read.is_reverse: return self.start
     else : return self.stop
-    
+  def __getattr__(self, name):
+    if name == '__class__': return str
+    else: return self.read.__getattribute__(name)
   def cdna_pos(self, p): #NOT READY
     #self.check()
     if p < self.start or p > self.stop:
@@ -191,7 +193,7 @@ class bam():#AlignedRead
       al += self.read.get_overlap(e.start, e.stop)
     if l - al > mis : return False ## 
     else: return True
-def compatible_bam_iter(bamfile, trans, mis = 0, sense = True):
+def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, minMapQ = None):
   if trans.chr not in bamfile.references : raise StopIteration
   rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
   #introns = trans.introns
@@ -200,6 +202,10 @@ def compatible_bam_iter(bamfile, trans, mis = 0, sense = True):
     if sense and read.strand != trans.strand:
       #print read.id + " not sense"
       continue
+    try: 
+      if maxNH is not None and r.read.get_tag('NH') > maxNH : continue
+    except: pass
+    if minMapQ is not None and r.read.mapping_quality < minMapQ : continue
     o = read.read.get_overlap(trans.start, trans.stop)
     if o < read.cdna_length() - mis: 
       continue

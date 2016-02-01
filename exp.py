@@ -1,3 +1,4 @@
+import math
 class exp(): #values for one gene/trans/probe
   def __init__(self, id, sample, data, anno = ''): #sample and expression list
     self.id = id
@@ -144,7 +145,7 @@ class profile():
     self.exps = {}
     self.ids = []
   def add_exp(self, e):
-    self.exps[e.id] = exp
+    self.exps[e.id] = e
     self.ids.append(e.id)
   def __len__(self):
     return len(self.exps)
@@ -166,4 +167,45 @@ class profile():
   def write(outfile, header = True, showanno = False, sep = '\t'):
     for id in self.ids:
      outfile.write(self.exps[id].string(showanno, sep) + '\n')
-    
+
+class readdict(dict):
+  def __init__(self, d = {}):
+    dict.__init__(self)
+    for i in d:
+      self[i] = d[i]
+  def sum(self):
+    s = 0
+    for i in self:
+      s += i * self[i]
+    return s
+  def size(self):
+    s = 0 
+    for i in self:
+      s += self[i]
+    return s
+  def mean(self):
+    return 1.0 * self.sum() / self.size()
+  def quantile(self, r = 0.5):
+    size = self.size()
+    size *= r
+    ks = self.keys()
+    ks.sort()
+    maxi = len(ks) - 1
+    for i, n in enumerate(ks):
+      if i == maxi : return n
+      size -= self[n]
+      if size < 0 : return n
+      elif size == 0 : return (n + ks[i+1])/2
+    return ks[-1]
+  def geomean(self, add = 1):
+    s = 0
+    for i in self:
+      s += math.log(i+add, 2) * self[i]
+    s /= self.size()
+    return 2 ** s - add
+  def median(self):
+    return self.quantile(0.5)
+  def record(self, read, n = 1):
+    if read not in self: self[read] = 0
+    self[read] += n
+        

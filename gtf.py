@@ -29,8 +29,15 @@ class exon:
   @property
   def length(self):
     return len(self)
+  def cdna_length(self): #Bed3 and Bed6
+    return len(self)
   def is_reverse(self): 
     return self.strand=='-'
+  @property
+  def anti_strand(self):
+    if self.strand == '+': return '-'
+    elif self.strand == '-': return '+'
+    else : return '.'
   @property
   def gid(self):
     try : 
@@ -67,6 +74,18 @@ class exon:
     return intersect(self, other)
   def union(self, other):
     return union(self, other)
+  def is_contain(self,p): #if i in exon
+    return self.start<=p<=self.stop
+  def cdna_pos(self,p): # exon only
+    if self.is_contain(p): return abs(p-self.end5)
+    else: return None
+  def genome_pos(self, p): # exon only
+    m = self.cdna_length()
+    if p < 0 or p > m: return None
+    if p == 0 : return self.end5
+    if p == m: return self.end3
+    if not self.is_reverse() : return self.start + p
+    else : return self.stop - p
     
 def attr(s, gff = False):
   if type(s) == dict: return s

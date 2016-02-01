@@ -270,6 +270,12 @@ def gtf2seq(seq, gtftrans):
     s += es
   return s
 
+def exon2seq(seq, e):
+  s = seq[e.start:e.stop]
+  if e.strand == '-':
+    s = rc(s)
+  return s
+
 def cdna_pos(trans, p):
   exons = trans.exons
   exons.sort(reverse = trans.is_reverse())

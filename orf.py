@@ -38,6 +38,10 @@ class orf:
     return self.stop - self.start
   def __cmp__(self, other):
     return cmp(len(self), len(other)) or cmp(self.start,other.start)
+  def length(self):
+    return len(self)
+  def aa_len(self):
+    return len(self) / codonSize
   @property
   def start(self):
     return min(self.starts + self.altstarts)
@@ -45,7 +49,7 @@ class orf:
     return len(self.starts) > 0
   def is_complete(self):
     return self.has_start() and self.has_stop()
-  def orf_by_ribo(self, frame, start, stop, srange = 4):
+  def orf_by_ribo(self, frame, start, stop, srange = 4): #look for TIS near ribo suggested ORF
     if self.frame != frame: return None
     if self.stop < start: return None
     if min(self.starts + self.altstarts) > stop : return None
@@ -102,7 +106,19 @@ def orflist(seq, strand = '+', sort = True):
     ol.append(o)
   if sort : ol.sort(reverse = True)
   return ol
-def orfs_by_pos(seq, pos): ### Unkown start codon, only to find stop codon
+
+def orf_by_pos(seq, pos): ### Unkown start codon, only to find stop codon
+  for i in range(pos, len(seq), codonSize):
+    try: codon = s[i:i+codonSize]
+    except: break
+    if codon in cstop: 
+      i += codonSize
+      break
+  o = orf(frame = pos % 3, stop = i)
+  o.altstart.append(pos)
+  return o
+
+def orfs_by_pos0(seq, pos): 
   orfs = []
   for f in range(codonSize):
     for i in range(pos+f, length, codonSize):
@@ -140,7 +156,7 @@ def findorf(seq, strand = '+', altcstart = False) :
       if codon in cs:
         if orfstart < 0: orfstart = i
       elif codon in cstop:
-        orfstop = i + codonSize
+        orfstop = i + codonSize ##
         if orfstart >= 0:
           orflen = (i - orfstart) / 3
           if f > 0:

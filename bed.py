@@ -128,7 +128,13 @@ class bed3:
   def cdna_pos(self,p): #Bed3 and Bed6
     if self.is_contain(p): return abs(p-self.end5)
     else: return None
-
+  def genome_pos(self, p): #Bed3 and Bed6
+    m = self.cdna_length()
+    if p < 0 or p > m: return None
+    if p == 0 : return self.end5
+    if p == m: return self.end3
+    if not self.is_reverse() : return self.start + p
+    else : return self.stop - p
   def is_overlap(self, other):
     if(self.chr != other.chr) : return False
     if (self.stop <= other.start) : return False
@@ -175,7 +181,11 @@ class bed6(bed3):
   @property
   def strand(self): #Bed6 and Bed12
     return self.items[5]
-  
+  @property
+  def anti_strand(self):
+    if self.strand == '+': return '-'
+    elif self.strand == '-': return '+'
+    else : return '.'
   def bed(self): #Only Bed6
     return bed6(self)
   

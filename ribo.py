@@ -1,8 +1,9 @@
 import random, numpy, math
-from zbio import stat, bam, gtf, bed
+from zbio import stat, bam, gtf, bed, interval
 from scipy.stats import ranksums, mannwhitneyu
 
-maxNH = 5
+codonSize = 3
+maxNH = 1
 minMapQ = 1 
 minTransLen = 50
 nhead, ntail = 12, 18
@@ -21,7 +22,7 @@ def bin_counts(arr, bin = bin):
     p = i * bin
     barr[i] = sum(arr[p:(p+bin)])
   return barr
-def rstest(x, y): # p value of x > y
+def rstest(x, y): # rank sum test p value of x > y
   st1, p1 = ranksums(x, y)
   try : st, p = mannwhitneyu(x, y)
   except : return 0.5
@@ -57,15 +58,23 @@ class ribo: #ribo seq profile in transcript
     #if total == 0 : continue
   def abdscore(self, norm = 1000):
     return math.log(float(self.total) / (self.length - 30) * norm)
-  def enrich_test(self, start, stop):
+  def enrich_test(self, start, stop): # Do not use
     inarr = self.cnts[start:stop]
-    outarr = self.cnts[self.nhead:start] + self.cnts[stop:self.length-ntail]
+    outarr = self.cnts[self.nhead:start] + self.cnts[stop:self.length-self.ntail]
     if len(outarr) <= 0: return None
     inbc = bin_counts(inarr)
     outbc = bin_counts(outarr)
     p = rstest(inbc, outbc)
     return p
-  def frame_test(self, start, stop):
+  def frame_test1(self, intv, frame):
+    inarr, outarr = [], []
+    for i in intv.num_iter():
+      i = int(i)
+      if i % codonSize == frame : inarr.append(self.cnts[i])
+      else : outarr.append(self.cnts[i])
+    p = rstest(inarr, outarr)
+    return p
+  def frame_test(self, start, stop): # old frame test, to be replaced
     l = (stop - start) / bin
     inarr = [0] * l
     outarr = [0] * 2 * l
@@ -76,13 +85,42 @@ class ribo: #ribo seq profile in transcript
       outarr[i*2 + 1] = self.cnts[p + 2]
     p = rstest(inarr, outarr)
     return p
-  def orf_test(self, orflist): 
+  def multi_orf_test(self, orflist, pth = 0.05): # main function of multiple ORF detection 
+    tid = self.trans.id
+    blank = interval.interval(start=self.nhead, stop=self.length-self.ntail, id=tid)
+    fps = [1] * len(orflist)
+    indeps = [None] * len(orflist)
+    nsig = -1
+    first = True
+    while first or nsig != 0 :
+      nsig = 0
+      first = False
+      for o, i in enumerate(orflist):
+        if fps[i] < pth : continue ## to be checked 
+        ointv = interval.interval(o.start, o.stop)
+        if first : 
+          fp = self.frame_test(ointv, o.frame-1)
+          if fp < fps[i] : fps[i] = fp
+          if fp < pth : 
+            blank -= ointv
+            nsig += 1
+        tintv = ointv.intersect(blank)
+        if not tintv.is_empty() : 
+          fp = self.frame_test(tintv, o.frame-1)
+          if fp < fps[i] : fps[i] = fp
+          if fp < pth : 
+            blank -= tintv
+            nsig += 1
+          
+        else : pass
+    
+  def orf_test(self, orflist): # to be replaced by multi_orf_test
     tid = self.trans.id
     blanklist = [bed.bed3(tid, self.nhead, self.ntail)]
     indeplist = []
     result = []
-    for start, stop in orflist:
-      b = bed.bed3(tid, start, stop)
+    for o in orflist:
+      b = bed.bed3(tid, o.start, o.stop)
       b.frame = start % 3
       bl1 = [] #new blank list
       ib = [] # overlap of b and blank
@@ -132,7 +170,7 @@ class ribo: #ribo seq profile in transcript
     l = len(slist)
     if l <= 1 : return slist
     slist.sort(key = lambda x: x[1], reverse = True)
-    minc = slist[0][1] * minratio
+    minc = slist[0][1] * minratio ## min reads cutoff, not used
     if minc <= 0 : return slist[0:n]
     for i in range(l):
       if slist[i][1] < minc : return slist[0:min(i,n)]
