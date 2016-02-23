@@ -107,15 +107,30 @@ def orflist(seq, strand = '+', sort = True):
   if sort : ol.sort(reverse = True)
   return ol
 
+class fixedorf():
+  def __init__(self, start, stop):
+    self.start = start
+    self.stop = stop
+  def __len__(self):
+    return self.stop - self.start
+  def length(self):
+    return len(self)
+  def __repr__(self):
+    return "Fixed ORF object: %d - %d" % (self.start, self.stop)
+  def frame(self):
+    return self.start % 3
+  def __cmp__(self, other):
+    return cmp(self.start, other.start) or cmp(self.stop, other.stop)
+  def orfstr(self, seq):
+    return "%s|%d-%d|%d" % (seq[self.start:self.start+3], self.start, self.stop, len(self))
 def orf_by_pos(seq, pos): ### Unkown start codon, only to find stop codon
   for i in range(pos, len(seq), codonSize):
-    try: codon = s[i:i+codonSize]
+    try: codon = seq[i:i+codonSize]
     except: break
     if codon in cstop: 
       i += codonSize
       break
-  o = orf(frame = pos % 3, stop = i)
-  o.altstart.append(pos)
+  o = fixedorf(start = pos, stop = i)
   return o
 
 def orfs_by_pos0(seq, pos): 

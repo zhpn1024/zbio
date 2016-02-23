@@ -1,19 +1,23 @@
 import random, numpy, math
-from zbio import stat, bam, gtf, bed, interval
+from zbio import stat, bam, gtf, bed, interval, exp
 from scipy.stats import ranksums, mannwhitneyu
 
 codonSize = 3
 maxNH = 1
 minMapQ = 1 
+minRlen = 6
 minTransLen = 50
-nhead, ntail = 12, 18
+defOffset = 12
+nhead, ntail = defOffset, 30 - defOffset
 bin = 3
 #offset = {}
 #for i in range(26,35):
   #offset[i] = 12
-def offset(length = 30):
-  return 12
-  
+def offset(length = 30, offdict = None):
+  if offdict is None : return defOffset
+  elif length in offdict : return offdict[length]
+  else : return None
+
 def bin_counts(arr, bin = bin):
   l = len(arr)
   lb = l / bin
@@ -29,7 +33,7 @@ def rstest(x, y): # rank sum test p value of x > y
   if st1 > 0 : return p
   else: return 1 - p ###
 class ribo: #ribo seq profile in transcript
-  def __init__(self, trans, ribobam, offset = offset, compatible = True, mis = 2):
+  def __init__(self, trans, ribobam, offset = offset, offdict = None, compatible = True, mis = 2):
     self.length = trans.cdna_length()
     self.cnts = [0] * self.length
     self.nhead = nhead
@@ -48,9 +52,9 @@ class ribo: #ribo seq profile in transcript
       if not c : continue ## 
       l = r.cdna_length()
       #if l not in offset: continue
-      loff = offset(l)
-      if l is None: continue
-      i = trans.cdna_pos(r.genome_pos(loff))
+      off = offset(l, offdict)
+      if off is None: continue
+      i = trans.cdna_pos(r.genome_pos(off))
       if i is None : continue
       #if i not in self.cnts: self.cnts[i] = 0
       self.cnts[i] += 1
@@ -66,12 +70,23 @@ class ribo: #ribo seq profile in transcript
     outbc = bin_counts(outarr)
     p = rstest(inbc, outbc)
     return p
-  def frame_test1(self, intv, frame):
+  def frame_test_region(self, region, frame): # Frame test in a region
     inarr, outarr = [], []
-    for i in intv.num_iter():
+    for i in region.num_iter():
       i = int(i)
       if i % codonSize == frame : inarr.append(self.cnts[i])
       else : outarr.append(self.cnts[i])
+    p = rstest(inarr, outarr)
+    return p
+  def enrich_test_region(self, r1, r2, frame): # Enrich test between regions
+    inarr, outarr = [], []
+    for i in r1.num_iter():
+      i = int(i)
+      if i % codonSize == frame : inarr.append(self.cnts[i])
+    for i in r2.num_iter():
+      i = int(i)
+      if i % codonSize == frame : outarr.append(self.cnts[i])
+    if len(inarr) <= 0 or len(outarr) <= 0 : return 1
     p = rstest(inarr, outarr)
     return p
   def frame_test(self, start, stop): # old frame test, to be replaced
@@ -83,37 +98,67 @@ class ribo: #ribo seq profile in transcript
       inarr[i] = self.cnts[p]
       outarr[i*2] = self.cnts[p + 1]
       outarr[i*2 + 1] = self.cnts[p + 2]
+    if len(inarr) <= 0 or len(outarr) <= 0 : return 1
     p = rstest(inarr, outarr)
     return p
-  def multi_orf_test(self, orflist, pth = 0.05): # main function of multiple ORF detection 
+  def multi_orf_test(self, orflist, pth = 0.05): # Main function of multiple ORF detection for riboseq data
     tid = self.trans.id
-    blank = interval.interval(start=self.nhead, stop=self.length-self.ntail, id=tid)
-    fps = [1] * len(orflist)
-    indeps = [None] * len(orflist)
-    nsig = -1
-    first = True
-    while first or nsig != 0 :
-      nsig = 0
-      first = False
-      for o, i in enumerate(orflist):
-        if fps[i] < pth : continue ## to be checked 
-        ointv = interval.interval(o.start, o.stop)
-        if first : 
-          fp = self.frame_test(ointv, o.frame-1)
-          if fp < fps[i] : fps[i] = fp
-          if fp < pth : 
-            blank -= ointv
-            nsig += 1
-        tintv = ointv.intersect(blank)
-        if not tintv.is_empty() : 
-          fp = self.frame_test(tintv, o.frame-1)
-          if fp < fps[i] : fps[i] = fp
-          if fp < pth : 
-            blank -= tintv
-            nsig += 1
-          
-        else : pass
+    blank = []
+    for i in range(codonSize): ## Blank regions in different frames
+      b = interval.interval(start=self.nhead, stop=self.length-self.ntail, id=tid)
+      blank.append(b)
+    eps, fps = [1] * len(orflist), [1] * len(orflist)
+    #indeps = [None] * len(orflist)
+    gid = [None] * len(orflist) # Group ID
+    grp = []
+    grplst = [] # Group list
+    # Group ORFs
+    for i, o in enumerate(orflist): # o is orf.fixedORF object ##(start, stop)
+      found = False
+      for j, og in enumerate(grp):
+        if o.stop == og.stop : # If belong to the group of og
+          if og.start > o.start : grp[j] = o # Represented by the longest ORF
+          gid[i] = j
+          grplst[j].append(o)
+          found = True
+          break
+      if not found : 
+        grp.append(o)
+        grplst.append([o])
+        gid[i] = len(grp) - 1
+    # Calculate ORF representative regions 
+    for j, og in enumerate(grp):
+      blank[og.frame()].sub_itv([og.start, og.stop]) # not blank in given frame
+      grplst[j].sort()
+      for k, o in enumerate(grplst[j]):
+        if k == 0 : o.prev = None # To compare with upstream ORF in the same group
+        else : o.prev = grplst[j][k-1]
+        try : o.next = grplst[j][k+1] # Downstream ORF
+        except : o.next = None
+        if o.next is None : stop = o.stop
+        else : stop = o.next.start
+        o.region = interval.interval(start = o.start, stop = stop)
+        o.indr = indep_region(o, blank)
+    blankall = blank[0]
+    for i in range(1, codonSize):
+      blankall = blankall.intersect(blank[i])
+    blank.append(blankall)
+    for i, o in enumerate(orflist):
+      eps[i], fps[i] = self.efpvalues(o, blank) #calculate enrichment and frame p-values
+    return eps, fps
     
+  def efpvalues(self, orf, blank): # For multi_orf_test
+    if orf.indr.rlen() < minRlen : r1 = orf.region
+    else : r1 = orf.indr
+    if orf.prev is None : 
+      r2 = blank[codonSize]
+      if r2.rlen() < minRlen : r2 = blank[orf.frame()]
+    elif orf.prev.indr.rlen() < minRlen : r2 = orf.prev.region
+    else : r2 = orf.prev.indr
+    ep = self.enrich_test_region(r1, r2, orf.frame())
+    fp = self.frame_test_region(r1, orf.frame())
+    return ep, fp
+
   def orf_test(self, orflist): # to be replaced by multi_orf_test
     tid = self.trans.id
     blanklist = [bed.bed3(tid, self.nhead, self.ntail)]
@@ -175,6 +220,28 @@ class ribo: #ribo seq profile in transcript
     for i in range(l):
       if slist[i][1] < minc : return slist[0:min(i,n)]
     return slist[0:n]
+  def top_summits_iter(self, minratio = 0, flank = 1): #generate all possible sites, do not specify total number
+    slist = []
+    for i in range(len(self.cnts)):
+      if self.cnts[i] == 0 : continue
+      if not self.is_summit(i, flank = flank): continue
+      slist.append((i, self.cnts[i]))
+    l = len(slist)
+    if l < 1 : return 
+    slist.sort(key = lambda x: x[1], reverse = True)
+    minc = slist[0][1] * minratio ## min reads cutoff, not used
+    #if minc <= 0 : return slist[0:n]
+    for i in range(l):
+      if slist[i][1] >= minc : yield slist[i]
+    #return slist[0:n]
+
+#### For multiple ORF detection
+def indep_region(orf, blank):
+  of = orf.frame
+  r = orf.region
+  for i in range(codonSize):
+    if i != of : r = r.intersect(blank[i])
+  return r
 
 #### For tis
 def pidx(value, lst, parts):
@@ -186,7 +253,7 @@ def pidx_uplim(i, lst, parts):
   l = len(lst) - 1
   return lst[int(l * parts[i])]
 
-def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, whole = False, maxcnt = 50, skip_tis = True, addchr = False):
+def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, offdict = None, whole = False, maxcnt = 50, skip_tis = True, addchr = False):
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
   bamfile = bam.bamfile(bampath, "rb")
@@ -204,7 +271,7 @@ def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset
       cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True)
       if cds1 is not None : mcds1.append(cds1)
       if cds2 is not None : mcds2.append(cds2)
-    mtis = ribo(merge, bamfile, offset = offset, compatible = False)
+    mtis = ribo(merge, bamfile, offset = offset, offdict = offdict, compatible = False)
     if mtis.total == 0 : continue
     score = mtis.abdscore()
     sl.append(score)
@@ -242,6 +309,134 @@ def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset
   bamfile.close()
   return paras, sl, data
 
+def frame_bias(arr): # ['0', '1', '2', '01', '02', '12', '012']
+  m = max(arr[0:codonSize])
+  s = ''
+  if m == 0 : return s
+  for i in range(codonSize):
+    if arr[i] == m : s += str(i)
+  return s
+
+# Calculate several distributions for quality control
+def lendis(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, minMapQ = minMapQ, minR = 1):
+  #minR = 100
+  bamfile = bam.bamfile(bampath, "rb")
+  gtffile = open(gtfpath,'r')
+  d = dis[1] - dis[0]
+  dis1, dis2 = {}, {} #sum of reads near start or stop condons
+  disf = {} # distribution of frame
+  fbias = {} # frame bias
+  fbkeys = ['0', '1', '2', '01', '02', '12', '012']
+  lendis = {} # reads length distribution
+  for l in range(lens[0], lens[1]):
+    lendis[l] = 0
+    dis1[l] = [None] * d
+    dis2[l] = [None] * d
+    disf[l] = [None] * codonSize
+    fbias[l] = {}
+    for di in range(d): 
+      dis1[l][di] = exp.readdict()
+      dis2[l][di] = exp.readdict()
+    for i in range(codonSize):
+      disf[l][i] = exp.readdict()
+    for k in fbkeys:
+      fbias[l][k] = 0
+  for g in gtf.gtfgene_iter(gtffile):
+    maxlen = 0
+    mt = None
+    for t in g.trans:
+      cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) 
+      try : cdslen = cds2 - cds1 
+      except : continue
+      if cdslen % 3 != 0 : continue
+      if cdslen > maxlen : maxlen, mt = cdslen, t
+    if mt is None : continue
+    t = mt
+    tl = t.cdna_length()
+    cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) - codonSize
+    tdis1, tdis2 = {}, {}
+    cnts = {}
+    for l in range(lens[0], lens[1]): 
+      tdis1[l] = [0] * d
+      tdis2[l] = [0] * d
+      cnts[l] = [0] * tl
+    tr = 0
+    
+    for r in bam.compatible_bam_iter(bamfile, t, mis = 2, maxNH = maxNH, minMapQ = minMapQ):
+      l = r.cdna_length()
+      if l not in tdis1: continue
+      i = t.cdna_pos(r.genome_pos(0)) # 5' end 
+      if i is None : continue
+      tr += 1
+      lendis[l] += 1
+      cnts[l][i] += 1
+      ir = i - cds1
+      if dis[0] <= ir < dis[1] : tdis1[l][ir - dis[0]] += 1
+      ir = i - cds2
+      if dis[0] <= ir < dis[1] : tdis2[l][ir - dis[0]] += 1
+    if tr < minR : continue
+    for l in tdis1: 
+      for di in range(d): 
+        dis1[l][di].record(tdis1[l][di])
+        dis2[l][di].record(tdis2[l][di])
+      for i in range(cds1, cds2, codonSize):
+        io = i-defOffset
+        if io < 0 : continue
+        for i2 in range(codonSize):
+          disf[l][i2].record(cnts[l][io+i2]) #
+        s = frame_bias(cnts[l][io:io+codonSize])
+        if s != '' : fbias[l][s] += 1
+  return lendis, dis1, dis2, disf, fbias
+def meandis(dis, geomean = False, add = 100):
+  mdis = {}
+  for l in dis: 
+    mdis[l] = [0] * (d)
+    for di in range(d): 
+      if geomean: mdis[l][di] = dis[l][di].geomean(add = add)
+      else : mdis[l][di] = dis[l][di].mean()
+  return mdis
+#print lendis
+#print mdis1
+#print mdis2
+
+################### Quality Control ###########################
+def quality(arr, thresholds = [0.6, 0.7]): # Quality estimation by RPF frame distribution
+  m = max(arr)
+  for i, a in enumerate(arr):
+    if a == m : 
+      frame = i
+      break
+  txt = "Max=%.2f, " % (m)
+  use = True
+  if m < thresholds[0] : 
+    txt += 'bad'
+    use = False
+  elif m < thresholds[1] : txt += 'fine'
+  else : txt += 'good'
+  return use, frame, txt
+
+# Estimate RPF P site offset distance
+def get_offset(arr, dis = [-40,20], frame = 0, defOffset = defOffset, flank = 6): 
+  a0 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] <= - defOffset - flank]
+  a1 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] >= - defOffset + flank]
+  a0m = 1.0 * sum(a0) / len(a0)
+  a1m = 1.0 * sum(a1) / len(a1)
+  th = int(((a0m + 1) * (a1m + 1)) ** 0.5)
+  #print th
+  for p in range(-defOffset - flank + 1, -defOffset + flank):
+    if p % codonSize != frame : continue
+    if arr[p - dis[0]] > th : return -p, th
+  return -p, th
+
+
+offsetFuncStr = '''
+def offset(length = 30):
+  if length not in offdict : return None
+  else : return offdict[length]
+'''
+def write_off_para(parafile, offdict): # Generate python code of offset function for parameter file
+  print >>parafile, 'offdict =', offdict
+  #print >>parafile, offsetFuncStr
 
 def intlog2(r):
   i = 0

@@ -110,19 +110,19 @@ class bam():#AlignedRead
     pos = self.start
     #l=range(len())
     for ctype, l in self.cigar:
-      if ctype in [0,7,8]:
+      if ctype in [0,7,8]: # M: alignment match, =: sequence match, X: sequence mismatch
         if l - p1 >= bias:
           pos += p1
           return pos
         else:
           pos += l
           p1 -= l
-      elif ctype in [1,4]:
+      elif ctype in [1,4]: # I: insertion to the reference, S: soft clipping
         if l - p1 >= bias:
           return pos
         else:
           p1 -= l
-      elif ctype in [2,3]:
+      elif ctype in [2,3]: # D: deletion from the reference, N: skipped region from the reference
         pos += l
     return None
   @property
@@ -203,9 +203,9 @@ def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, min
       #print read.id + " not sense"
       continue
     try: 
-      if maxNH is not None and r.read.get_tag('NH') > maxNH : continue
+      if maxNH is not None and read.read.get_tag('NH') > maxNH : continue
     except: pass
-    if minMapQ is not None and r.read.mapping_quality < minMapQ : continue
+    if minMapQ is not None and read.read.mapping_quality < minMapQ : continue
     o = read.read.get_overlap(trans.start, trans.stop)
     if o < read.cdna_length() - mis: 
       continue

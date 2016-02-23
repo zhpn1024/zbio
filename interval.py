@@ -28,7 +28,7 @@ class interval: # all intervals are supposed to be [start, end) and start should
     for i in dl[::-1]: del self.lst[i]
   def __len__(self):
     return len(self.lst)
-  def itv_length(self):
+  def rlen(self):
     l = 0
     for itv in self.lst: l += itv[1] - itv[0]
     return l
@@ -97,6 +97,7 @@ class interval: # all intervals are supposed to be [start, end) and start should
       if right and itv[1] == p : return True
     return False
   def num_iter(self, start = None, step = 1):
+    if self.rlen() <= 0 : return
     if start is None : start = self.start
     i = start
     while i < self.stop : 
