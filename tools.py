@@ -250,28 +250,32 @@ def find_overlap(q, lst, func=overlap, ignoreStrand = True): # List should have 
   return -1
 
 def bed2seq(seq, bed):
+  if type(seq) == str : idx = False
+  else : idx = True
   s = ''
   for e in bed.exons:
-    es = seq[e.start:e.stop]
+    if idx : es = seq.fetch(e.chr, start = e.start, stop = e.stop)
+    else : es = seq[e.start:e.stop]
     if e.strand == '-':
       es = rc(es)
     s += es
   return s
 
 def gtf2seq(seq, gtftrans):
+  if type(seq) == str : idx = False
+  else : idx = True
   s = ''
-  #gtftrans.exons.sort()
-  #if gtftrans.strand == '-':
-    #gtftrans.exons.reverse()
   for e in gtftrans.exons:
-    es = seq[e.start:e.stop]
+    if idx : es = seq.fetch(e.chr, start = e.start, stop = e.stop)
+    else : es = seq[e.start:e.stop]
     if e.strand == '-':
       es = rc(es)
     s += es
   return s
 
 def exon2seq(seq, e):
-  s = seq[e.start:e.stop]
+  if type(seq) == str : s = seq[e.start:e.stop]
+  else : s = seq.fetch(e.chr, start = e.start, stop = e.stop)
   if e.strand == '-':
     s = rc(s)
   return s

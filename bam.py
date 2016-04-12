@@ -193,7 +193,14 @@ class bam():#AlignedRead
       al += self.read.get_overlap(e.start, e.stop)
     if l - al > mis : return False ## 
     else: return True
-def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, minMapQ = None):
+  def is_m0(self): # mismatch at 5' end
+    if self.strand == '+' : 
+      if self.get_tag('MD')[0] == '0' : return True # mismatch at 0
+      else : return False
+    elif self.get_tag('MD')[-1] == '0' : 
+      if not self.get_tag('MD')[-2].isdigit() : return True
+    return False
+def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, minMapQ = None, secondary = False):
   if trans.chr not in bamfile.references : raise StopIteration
   rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
   #introns = trans.introns
@@ -205,6 +212,7 @@ def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, min
     try: 
       if maxNH is not None and read.read.get_tag('NH') > maxNH : continue
     except: pass
+    if not secondary and r.is_secondary : continue
     if minMapQ is not None and read.read.mapping_quality < minMapQ : continue
     o = read.read.get_overlap(trans.start, trans.stop)
     if o < read.cdna_length() - mis: 

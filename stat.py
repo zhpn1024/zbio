@@ -30,13 +30,65 @@ def load_data(arr):
     data[k] += 1
   return data
 def fisher_method(ps):
-  n = len(ps)
+  n = 0
   fs = 0
   for p in ps:
+    if p is None : continue
     if p == 0 : return 0.0, -1 ###
     fs += - 2 * math.log(p)
+    n += 1
   fp = chisqprob(fs, 2 * n)
   return fp, fs
+
+def combination_log(n, k, logarr = logarr, show = False): # N choose K, log combination number, NATURAL LOG!
+  if n < 0 : return None
+  if k > n or k < 0: return None #None is log(0)
+  if k * 2 > n: k = n - k
+  lpr = 0.0
+  nk = n - k
+  logarr_ext(n, logarr = logarr)
+  for i in range(n, nk, -1):
+    lpr += logarr[i]
+  for i in range(k, 0, -1):
+    lpr -= logarr[i]
+    #else : lpr += math.log10(n - i) - math.log10(k - i)
+  return lpr
+
+def ACprob(x, y, r = 1): # p(y|x) = r^y C(x+y,y) / (1+r)^(x+y+1) , r = N2/N1 by Audic and Claverie 
+  lp = combination_log(x+y, x)
+  lp += math.log(r) * y
+  lp -= math.log(1 + r) * (1 + x + y)
+  return math.exp(lp)
+def ACtest(x, y, r = 1, alt = 'auto', double = True): # Diff expression test by Audic and Claverie 
+  if alt in ('g', 'greater') : n1, n2, nr = x, y, r  # if x > y ?
+  elif alt in ('l', 'less') : n1, n2, nr = y, x, 1.0/r
+  elif x * r < y : n1, n2, nr = y, x, 1.0/r # n2 is smaller than n1
+  else : n1, n2, nr = x, y, r
+  pv = 0
+  for i in range(n2 + 1):
+    pv += ACprob(n1, i, nr)
+    if double and pv >= 0.5 : return 1
+    #print pv
+  if double : pv *= 2 # Two tailed
+  if pv > 1 : pv = 1
+  return pv
+
+def FCtest(x, y, r = 1, fc = 1.5, alt = 'auto', double = True): # Test whether exp diff > fold change (binom test). For data with no replicate|dispersion 
+  n = x + y
+  if y > 0 : fcr = 1.0 * x * r / y
+  else : fcr = fc + 1 ###
+  if alt in ('g', 'greater') and fcr <= fc : return 1
+  elif alt in ('l', 'less') and fcr >= 1.0 / fc : return 1
+  if 1.0 / fc <= fcr <= fc : return 1
+  if fcr > fc : 
+    p = fc / (fc + r)
+    pv = binom_test(x, n, p = p, alt = "g")
+  elif fcr < 1.0 / fc : 
+    p = 1.0 / (1 + r * fc)
+    pv = binom_test(x, n, p = p, alt = "l")
+  if double : pv *= 2  # Doubling the smaller tail
+  if pv > 1 : pv = 1
+  return pv
 
 def hypergeo0(N, K, n, k):
   p = 1.0

@@ -1,9 +1,10 @@
 import random, numpy, math
-from zbio import stat, bam, gtf, bed, interval, exp
+from zbio import stat, bam, gtf, bed, interval, exp, orf, tools
 from scipy.stats import ranksums, mannwhitneyu
 
 codonSize = 3
-maxNH = 1
+maxNH = 5
+secondary = False
 minMapQ = 1 
 minRlen = 6
 minTransLen = 50
@@ -13,9 +14,13 @@ bin = 3
 #offset = {}
 #for i in range(26,35):
   #offset[i] = 12
-def offset(length = 30, offdict = None):
+def offset(read = 30, offdict = None):
   if offdict is None : return defOffset
-  elif length in offdict : return offdict[length]
+  if type(read) == int : length = read # compatible with old versions!
+  else : length = read.cdna_length()
+  if 'm0' not in offdict or not read.is_m0() : od = offdict
+  else : od = offdict['m0']
+  if length in od : return od[length]
   else : return None
 
 def bin_counts(arr, bin = bin):
@@ -33,7 +38,7 @@ def rstest(x, y): # rank sum test p value of x > y
   if st1 > 0 : return p
   else: return 1 - p ###
 class ribo: #ribo seq profile in transcript
-  def __init__(self, trans, ribobam, offset = offset, offdict = None, compatible = True, mis = 2):
+  def __init__(self, trans, ribobam, offset = offset, offdict = None, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary, compatible = True, mis = 2):
     self.length = trans.cdna_length()
     self.cnts = [0] * self.length
     self.nhead = nhead
@@ -47,14 +52,15 @@ class ribo: #ribo seq profile in transcript
         if r.read.get_tag('NH') > maxNH : continue
       except: pass
       if r.read.mapping_quality < minMapQ : continue
+      if not secondary and r.is_secondary : continue
       if compatible : c = r.is_compatible(trans, mis = mis)
       else: c = r.is_inside(trans, mis = mis)
       if not c : continue ## 
       l = r.cdna_length()
       #if l not in offset: continue
-      off = offset(l, offdict)
+      off = offset(r, offdict)
       if off is None: continue
-      i = trans.cdna_pos(r.genome_pos(off))
+      i = trans.cdna_pos(r.genome_pos(off)) ## Default bias
       if i is None : continue
       #if i not in self.cnts: self.cnts[i] = 0
       self.cnts[i] += 1
@@ -74,8 +80,10 @@ class ribo: #ribo seq profile in transcript
     inarr, outarr = [], []
     for i in region.num_iter():
       i = int(i)
+      #print i
       if i % codonSize == frame : inarr.append(self.cnts[i])
       else : outarr.append(self.cnts[i])
+    if len(inarr) <= 0 or len(outarr) <= 0 : return None
     p = rstest(inarr, outarr)
     return p
   def enrich_test_region(self, r1, r2, frame): # Enrich test between regions
@@ -86,7 +94,7 @@ class ribo: #ribo seq profile in transcript
     for i in r2.num_iter():
       i = int(i)
       if i % codonSize == frame : outarr.append(self.cnts[i])
-    if len(inarr) <= 0 or len(outarr) <= 0 : return 1
+    if len(inarr) <= 0 or len(outarr) <= 0 : return None
     p = rstest(inarr, outarr)
     return p
   def frame_test(self, start, stop): # old frame test, to be replaced
@@ -101,7 +109,7 @@ class ribo: #ribo seq profile in transcript
     if len(inarr) <= 0 or len(outarr) <= 0 : return 1
     p = rstest(inarr, outarr)
     return p
-  def multi_orf_test(self, orflist, pth = 0.05): # Main function of multiple ORF detection for riboseq data
+  def multi_orf_test(self, orflist): # Main function of multiple ORF detection for riboseq data
     tid = self.trans.id
     blank = []
     for i in range(codonSize): ## Blank regions in different frames
@@ -135,28 +143,41 @@ class ribo: #ribo seq profile in transcript
         else : o.prev = grplst[j][k-1]
         try : o.next = grplst[j][k+1] # Downstream ORF
         except : o.next = None
-        if o.next is None : stop = o.stop
-        else : stop = o.next.start
-        o.region = interval.interval(start = o.start, stop = stop)
+        #if o.next is None : stop = o.stop
+        #else : stop = o.next.start  ## Inside group regions
+        o.region = interval.interval(start = o.start, stop = o.stop)
         o.indr = indep_region(o, blank)
     blankall = blank[0]
     for i in range(1, codonSize):
       blankall = blankall.intersect(blank[i])
     blank.append(blankall)
     for i, o in enumerate(orflist):
+      #print self.trans.id, o, o.region, blank
       eps[i], fps[i] = self.efpvalues(o, blank) #calculate enrichment and frame p-values
     return eps, fps
     
   def efpvalues(self, orf, blank): # For multi_orf_test
     if orf.indr.rlen() < minRlen : r1 = orf.region
     else : r1 = orf.indr
+    fp = self.frame_test_region(r1, orf.frame())
+    r2 = blank[codonSize]
+    if r2.rlen() < minRlen or orf.indr.rlen() < minRlen : r2 = blank[orf.frame()]
+    ep = self.enrich_test_region(r1, r2, orf.frame())
+    ''' More complicated tests
     if orf.prev is None : 
       r2 = blank[codonSize]
-      if r2.rlen() < minRlen : r2 = blank[orf.frame()]
-    elif orf.prev.indr.rlen() < minRlen : r2 = orf.prev.region
-    else : r2 = orf.prev.indr
-    ep = self.enrich_test_region(r1, r2, orf.frame())
-    fp = self.frame_test_region(r1, orf.frame())
+      if r2.rlen() < minRlen or orf.indr.rlen() < minRlen : r2 = blank[orf.frame()]
+      ep = self.enrich_test_region(r1, r2, orf.frame())
+    else : 
+      ep = None
+      op = orf.prev
+      while op is not None : # Should be larger than all upstream ORF regions
+        if op.indr.rlen() < minRlen : r2 = op.region
+        else : r2 = op.indr
+        ep1 = self.enrich_test_region(r1, r2, orf.frame())
+        if ep1 > ep : ep = ep1
+        op = op.prev
+    '''
     return ep, fp
 
   def orf_test(self, orflist): # to be replaced by multi_orf_test
@@ -194,7 +215,7 @@ class ribo: #ribo seq profile in transcript
     zt = stat.ztnb(r, p)
     p = zt.pvalue(self.cnts[start])
     return p
-  def is_summit(self, p, flank = 1):
+  def is_summit(self, p, flank = 3):
     if p < nhead or p > self.length - ntail: return False
     if self.cnts[p] == 0: return False
     for i in range(1, flank + 1):
@@ -202,11 +223,11 @@ class ribo: #ribo seq profile in transcript
       if self.cnts[p] < self.cnts[p - i]: return False
     return True
   def cnts_dict(self):
-    cd = {}
+    cd = exp.readdict() #{}
     for i in range(nhead, len(self.cnts) - ntail):
       if self.cnts[i] > 0 : cd[i] = self.cnts[i]
     return cd
-  def top_summits(self, n = 10, minratio = 0, flank = 1):
+  def top_summits(self, n = 10, minratio = 0, flank = 3):
     slist = []
     for i in range(len(self.cnts)):
       if self.cnts[i] == 0 : continue
@@ -220,7 +241,7 @@ class ribo: #ribo seq profile in transcript
     for i in range(l):
       if slist[i][1] < minc : return slist[0:min(i,n)]
     return slist[0:n]
-  def top_summits_iter(self, minratio = 0, flank = 1): #generate all possible sites, do not specify total number
+  def top_summits_iter(self, minratio = 0, flank = 3): #generate all possible sites, do not specify total number
     slist = []
     for i in range(len(self.cnts)):
       if self.cnts[i] == 0 : continue
@@ -253,50 +274,63 @@ def pidx_uplim(i, lst, parts):
   l = len(lst) - 1
   return lst[int(l * parts[i])]
 
-def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset, offdict = None, whole = False, maxcnt = 50, skip_tis = True, addchr = False):
+def estimate_tis_bg(gtfpath, bampath, genome, parts = [0.25, 0.5, 0.75], offset = offset, offdict = None, whole = True, maxqt = 0.95, skip_tis = True, alt_tis = True, tis_flank = 1, addchr = False):
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
   bamfile = bam.bamfile(bampath, "rb")
   gtffile = open(gtfpath, 'r')
   fulldata, genes, sl = {}, [], []
-  data = []
-  for i in range(len(parts)):
-    data.append({})
+  data = [exp.readdict() for i in range(len(parts))]
+  #for i in range(len(parts)):
+    #data.append({})
+  lastchr = ''
   for g in gtf.gtfgene_iter(gtffile, addchr = addchr):
+    if g.chr not in genome: continue
+    if g.chr != lastchr: 
+      print g.chr
+      lastchr = g.chr
     merge = g.merge_trans()
     ml = merge.cdna_length()
     if ml < minTransLen : continue ##
-    mcds1, mcds2 = [], []
-    for t in g.trans:
-      cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True)
-      if cds1 is not None : mcds1.append(cds1)
-      if cds2 is not None : mcds2.append(cds2)
     mtis = ribo(merge, bamfile, offset = offset, offdict = offdict, compatible = False)
     if mtis.total == 0 : continue
+    mcds1, mcds2 = [], []
+    for t in g.trans:
+      cds1, cds2 = merge.cdna_pos(t.cds_start(cdna = False)), merge.cdna_pos(t.cds_stop(cdna = False))
+      if cds1 is not None : mcds1.append(cds1)
+      if cds2 is not None : mcds2.append(cds2)
+    
     score = mtis.abdscore()
     sl.append(score)
     fulldata[g.id] = mtis.cnts_dict(), score, mcds1, mcds2
     genes.append(merge)
+    #print g.id, fulldata[g.id]
   sl.sort()
   print 'Group data...'
   for m in genes:
     cnts, score, mcds1, mcds2 = fulldata[m.gid]
+    #print m.gid, cnts
     ip = pidx(score, sl, parts)
     if whole : start = nhead ##
     elif len(mcds2) > 0: start = max(mcds2) ##The last stop codon
     else : continue ##
-    for i in range(start, ml - 18):
-      if skip_tis and i in mcds1: continue
+    ml = m.cdna_length()
+    msq = tools.gtf2seq(genome, m)
+    for i in range(start, ml - ntail):
       if i not in cnts: continue # ignore 0s
-      if cnts[i] not in data[ip]:
-        data[ip][cnts[i]] = 0
-      data[ip][cnts[i]] += 1
+      if skip_tis and orf.is_start(msq, i, alt = alt_tis, flank = tis_flank) : continue # i in mcds1: continue
+      #if cnts[i] not in data[ip]:
+        #data[ip][cnts[i]] = 0
+      #data[ip][cnts[i]] += 1
+      data[ip].record(cnts[i])
+      #print m.gid, ip, i, cnts[i]
       
   print 'Estimate ZTNB parameters...'
   paras = []
   l = len(sl) - 1
   ip = 0
-  for da in data:
+  for ip, da in enumerate(data):
+    maxcnt = da.quantile(maxqt) + 5 ##
     d = {}
     for i in range(maxcnt): ## max range 
       if i in da: d[i] = da[i]
@@ -304,7 +338,7 @@ def estimate_tis_bg(gtfpath, bampath, parts = [0.25, 0.5, 0.75], offset = offset
     zt.estimate(d, max_iter=10000)#, nlike=100)
     paras.append((zt.r, zt.p))
     #print >>estfile, zt.r, zt.p, sl[int(l * parts[ip])], d
-    ip += 1
+    #ip += 1
   gtffile.close()
   bamfile.close()
   return paras, sl, data
@@ -317,9 +351,121 @@ def frame_bias(arr): # ['0', '1', '2', '01', '02', '12', '012']
     if arr[i] == m : s += str(i)
   return s
 
+################### Quality Control ###########################
+
 # Calculate several distributions for quality control
-def lendis(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, minMapQ = minMapQ, minR = 1):
+def lendis(gtfpath, bampath, lens = [25,35], dis = [-40,20], ccds = False, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary, minR = 1, m0 = True):
   #minR = 100
+  bamfile = bam.bamfile(bampath, "rb")
+  gtffile = open(gtfpath,'r')
+  d = dis[1] - dis[0]
+  dis1, dis2 = {}, {} #sum of reads near start or stop condons
+  disf = {} # distribution of frame
+  #fbias = {} # frame bias
+  fbkeys = ['0', '1', '2', '01', '02', '12', '012']
+  lendis = {} # reads length distribution
+  if m0 : 
+    dis1m0, dis2m0 = {}, {} #sum of reads near start or stop condons
+    disfm0 = {} # distribution of frame
+    lendism0 = {}
+  for l in range(lens[0], lens[1]):
+    lendis[l] = 0
+    dis1[l] = [exp.readdict() for i in range(d)]
+    dis2[l] = [exp.readdict() for i in range(d)]
+    disf[l] = [exp.readdict() for i in range(codonSize)]
+    #fbias[l] = {}
+    if m0 :
+      lendism0[l] = 0
+      dis1m0[l] = [exp.readdict() for i in range(d)]
+      dis2m0[l] = [exp.readdict() for i in range(d)]
+      disfm0[l] = [exp.readdict() for i in range(codonSize)]
+    #for k in fbkeys:
+      #fbias[l][k] = 0
+  for g in gtf.gtfgene_iter(gtffile):
+    maxlen = 0
+    mt = None
+    for t in g.trans:
+      if ccds and ('ccds_id' not in t.attr) : continue
+      cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) 
+      try : cdslen = cds2 - cds1 
+      except : continue
+      if cdslen % 3 != 0 : continue
+      if cdslen > maxlen : maxlen, mt = cdslen, t
+    if mt is None : continue
+    t = mt
+    tl = t.cdna_length()
+    cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) - codonSize
+    tdis1, tdis2 = {}, {}
+    cnts = {}
+    if m0 : 
+      tdis1m0, tdis2m0 = {}, {}
+      cntsm0 = {}
+    for l in range(lens[0], lens[1]): 
+      tdis1[l] = [0] * d
+      tdis2[l] = [0] * d
+      cnts[l] = [0] * tl
+      if m0 :
+        tdis1m0[l] = [0] * d
+        tdis2m0[l] = [0] * d
+        cntsm0[l] = [0] * tl
+    tr = 0 # Total reads
+    
+    for r in bam.compatible_bam_iter(bamfile, t, mis = 2, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary):
+      ism0 = r.is_m0()
+      #if m0 :
+        #if r.strand == '+' and r.get_tag('MD')[0] == '0' : ism0 = True # mismatch at 0
+        #if r.strand != '+' and r.get_tag('MD')[-1] == '0' : 
+          #if not r.get_tag('MD')[-2].isdigit() : ism0 = True
+      l = r.cdna_length()
+      if l not in tdis1: continue # not in given length range
+      i = t.cdna_pos(r.genome_pos(0)) # 5' end 
+      if i is None : continue
+      tr += 1
+      if not ism0 : 
+        lendis[l] += 1
+        cnts[l][i] += 1
+        ir = i - cds1
+        if dis[0] <= ir < dis[1] : tdis1[l][ir - dis[0]] += 1
+        ir = i - cds2
+        if dis[0] <= ir < dis[1] : tdis2[l][ir - dis[0]] += 1
+      else : 
+        lendism0[l] += 1
+        cntsm0[l][i] += 1
+        ir = i - cds1
+        if dis[0] <= ir < dis[1] : tdis1m0[l][ir - dis[0]] += 1
+        ir = i - cds2
+        if dis[0] <= ir < dis[1] : tdis2m0[l][ir - dis[0]] += 1
+    if tr < minR : continue
+    for l in tdis1: 
+      for di in range(d): 
+        dis1[l][di].record(tdis1[l][di])
+        dis2[l][di].record(tdis2[l][di])
+        if m0 :
+          dis1m0[l][di].record(tdis1m0[l][di])
+          dis2m0[l][di].record(tdis2m0[l][di])
+      for i in range(cds1, cds2, codonSize):
+        io = i-defOffset
+        if io < 0 : continue
+        for i2 in range(codonSize):
+          disf[l][i2].record(cnts[l][io+i2]) #
+          if m0 : disfm0[l][i2].record(cntsm0[l][io+i2])
+        #s = frame_bias(cnts[l][io:io+codonSize])
+        #if s != '' : fbias[l][s] += 1
+  results = [lendis, dis1, dis2, disf]
+  if m0 : results += [lendism0, dis1m0, dis2m0, disfm0]
+  return results
+def meandis(dis, geomean = False, add = 100):
+  mdis = {}
+  for l in dis: 
+    mdis[l] = [0] * (d)
+    for di in range(d): 
+      if geomean: mdis[l][di] = dis[l][di].geomean(add = add)
+      else : mdis[l][di] = dis[l][di].mean()
+  return mdis
+#print lendis
+#print mdis1
+#print mdis2
+def lendisM0(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, minMapQ = minMapQ, minR = 1):
   bamfile = bam.bamfile(bampath, "rb")
   gtffile = open(gtfpath,'r')
   d = dis[1] - dis[0]
@@ -363,6 +509,7 @@ def lendis(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, minM
     tr = 0
     
     for r in bam.compatible_bam_iter(bamfile, t, mis = 2, maxNH = maxNH, minMapQ = minMapQ):
+      if r.get_tag('MD')[0] != '0' : continue ## Only reads with mismatch at 1st nt
       l = r.cdna_length()
       if l not in tdis1: continue
       i = t.cdna_pos(r.genome_pos(0)) # 5' end 
@@ -387,45 +534,40 @@ def lendis(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, minM
         s = frame_bias(cnts[l][io:io+codonSize])
         if s != '' : fbias[l][s] += 1
   return lendis, dis1, dis2, disf, fbias
-def meandis(dis, geomean = False, add = 100):
-  mdis = {}
-  for l in dis: 
-    mdis[l] = [0] * (d)
-    for di in range(d): 
-      if geomean: mdis[l][di] = dis[l][di].geomean(add = add)
-      else : mdis[l][di] = dis[l][di].mean()
-  return mdis
-#print lendis
-#print mdis1
-#print mdis2
 
-################### Quality Control ###########################
 def quality(arr, thresholds = [0.6, 0.7]): # Quality estimation by RPF frame distribution
   m = max(arr)
   for i, a in enumerate(arr):
     if a == m : 
       frame = i
       break
-  txt = "Max=%.2f, " % (m)
+  txt = "%.2f " % (m)
   use = True
   if m < thresholds[0] : 
-    txt += 'bad'
+    txt += 'fail'
     use = False
-  elif m < thresholds[1] : txt += 'fine'
+  elif m < thresholds[1] : txt += 'pass'
   else : txt += 'good'
   return use, frame, txt
 
 # Estimate RPF P site offset distance
-def get_offset(arr, dis = [-40,20], frame = 0, defOffset = defOffset, flank = 6): 
+def get_offset(arr, dis = [-40,20], frame = 0, defOffset = defOffset, flank = 6, tis = False): 
   a0 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] <= - defOffset - flank]
-  a1 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] >= - defOffset + flank]
-  a0m = 1.0 * sum(a0) / len(a0)
-  a1m = 1.0 * sum(a1) / len(a1)
-  th = int(((a0m + 1) * (a1m + 1)) ** 0.5)
+  a1 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] > - defOffset - flank]
+  #a0.sort()
+  #a1.sort()
+  #a0m = 1.0 * sum(a0) / len(a0)
+  #a1m = 1.0 * sum(a1) / len(a1)
+  a0m = max(a0) # / 2.0
+  a1m = max(a1) # / 2.0
+  #th = int(((a0m + 1) * (a1m + 1)) ** 0.5)
+  th = int((a0m + a1m) / 6.0) ###
   #print th
   for p in range(-defOffset - flank + 1, -defOffset + flank):
     if p % codonSize != frame : continue
-    if arr[p - dis[0]] > th : return -p, th
+    if tis :
+      if arr[p - dis[0]] == a1m : return -p, th
+    elif arr[p - dis[0]] > th : return -p, th
   return -p, th
 
 

@@ -22,9 +22,12 @@ class exp(): #values for one gene/trans/probe
       c = c or cmp(self.value[i], other.value[i])
       if c != 0: break
     return c
-  def headerline(self, sep='\t'):# Header string, fit all bed
+  def headerline(self, showanno = False, sep='\t'):# Header string, fit all bed
     sep=str(sep)
-    return 'id' + sep + sep.join(map(str, self.sample))
+    s = 'id' + sep
+    if showanno : s += 'anno' + sep
+    s += sep.join(map(str, self.sample))
+    return s
     
 class trans(exp):
   def __init__(self, tid, sample, data):
@@ -149,6 +152,9 @@ class profile():
     self.ids.append(e.id)
   def __len__(self):
     return len(self.exps)
+  def __iter__(self):
+    for eid in self.ids:
+      yield self.exps[eid]
   def BHcorrection(self, pid = -1, total = -1):
     lst = self.exps.values()
     n = len(lst)
@@ -164,9 +170,39 @@ class profile():
       lst[i].q = q
       qc = q
     return lst
-  def write(outfile, header = True, showanno = False, sep = '\t'):
-    for id in self.ids:
-     outfile.write(self.exps[id].string(showanno, sep) + '\n')
+  def write(self, outfile, header = True, showanno = False, sep = '\t'):
+    for eid in self.ids:
+      outfile.write(self.exps[eid].string(showanno, sep) + '\n')
+      showanno = False
+  def TMM(self, i1 = 0, i2 = 1, mtrim = 0.3, atrim = 0.05): # The Trimmed Mean of M-values by edgeR, return log2 scale factor
+    exps = self.exps.values()
+    n = len(exps)
+    nmt = int(mtrim * n) + 1 # m trim 0.3
+    nat = int(atrim * n) + 1 # a trim 0.1
+    for e in exps:
+      e.M = math.log(1.0 * e.data[i1] / e.data[i2], 2)
+      e.A = 0.5 * math.log(e.data[i1] * e.data[i2], 2)
+      e.V = 1.0 / e.data[i1] + 1.0 / e.data[i2]
+      #e.data += [m, a, v]
+      e.select = True
+      e.value[0:1] = [e.M] ### sort1 = m
+    exps.sort()
+    for i in range(nmt): exps[i].select = False
+    for i in range(n-nmt, n) : exps[i].select = False
+  
+    for e in exps: e.value[0:1] = [e.A] # sort2 = a
+    exps.sort()
+    for i in range(nat): exps[i].select = False
+    for i in range(n-nat, n) : exps[i].select = False
+
+    s = w = 0
+    for e in exps:
+      if not e.select : continue
+      s += e.M / e.V
+      w += 1 / e.V
+    f = s / w
+    #print f, s, w, n
+    return f
 
 class readdict(dict):
   def __init__(self, d = {}):

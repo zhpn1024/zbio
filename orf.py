@@ -3,6 +3,7 @@ from zbio import Tools
 codonSize = 3
 cstart = ['ATG']
 cstartlike = ['TTG', 'CTG', 'GTG', 'AAG', 'AGG', 'ACG', 'ATT', 'ATA', 'ATC'] #AAG & AGG may be removed
+caltstart = cstartlike
 cstop = ['TGA', 'TAA', 'TAG']
 
 senseframe = [1, 2, 3]
@@ -122,7 +123,7 @@ class fixedorf():
   def __cmp__(self, other):
     return cmp(self.start, other.start) or cmp(self.stop, other.stop)
   def orfstr(self, seq):
-    return "%s|%d-%d|%d" % (seq[self.start:self.start+3], self.start, self.stop, len(self))
+    return "%s|%d-%d" % (seq[self.start:self.start+3], self.start, self.stop)
 def orf_by_pos(seq, pos): ### Unkown start codon, only to find stop codon
   for i in range(pos, len(seq), codonSize):
     try: codon = seq[i:i+codonSize]
@@ -209,3 +210,13 @@ def translate(seq):
     except : a = 'X'
     aa += a
   return aa
+
+def is_start(seq, pos, alt = False, flank = 0):
+  for i in range(pos - flank, pos + flank + 1):
+    try : c = seq[i:i+codonSize]
+    except : continue
+    if c in cstart : return True
+    elif alt and c in cstartlike : return True
+  return False
+def is_startlike(seq, pos, flank = 0):
+  return is_start(seq, pos, alt = True, flank = flank)

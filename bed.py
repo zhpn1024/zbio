@@ -226,16 +226,27 @@ def tup2com(t): #tuple to comma string
 
 class bed12(bed6):
   
-  Header=('chr','start','stop','id','score','strand',"cds_start","cds_stop","itemRgb","blockCount","blockSizes","blockStarts")
+  Header=('chr','start','stop','id','score','strand',"thick_start","thick_stop","itemRgb","blockCount","blockSizes","blockStarts")
   Format=(str,int,int,str,str,str,int,int,com2tup,int,com2tup,com2tup)
   n=12
-  
   @property
-  def cds_start(self): #Bed12
+  def thick_start(self): #Bed12
     return self.items[6]
   @property
-  def cds_stop(self):
+  def thick_stop(self):
     return self.items[7]
+  #@property
+  def cds_start(self, cdna = False): #Bed12
+    if self.strand != '-' : s = self.items[6]
+    else : s = self.items[7]
+    if not cdna : return s
+    else : return self.cdna_pos(s)
+  #@property
+  def cds_stop(self, cdna = False):
+    if self.strand != '-' : s = self.items[7]
+    else : s = self.items[6]
+    if not cdna : return s
+    else : return self.cdna_pos(s)
   @property
   def itemRgb(self):
     return self.items[8]
@@ -261,7 +272,17 @@ class bed12(bed6):
     l[10]=tup2com(l[10])
     l[11]=tup2com(l[11])
     return '\t'.join(map(str,l))
-  
+
+  def genePredStr(self, geneName = False, extended = False):
+    lst = []
+    if geneName : lst += [self.name]
+    lst += [self.id, self.chr, self.strand, self.start, self.stop, self.thick_start, self.thick_stop, self.blockCount]
+    exonStarts = [x + self.start for x in self.blockStarts]
+    exonStops = [x + self.start for x in self.blockStops]
+    lst += [tup2com(exonStarts), tup2com(exonStops)]
+    if extened : 
+      lst += [self.name2, tup2com(self.exonFrames), self.cdsStartStat, self.cdsEndStat]
+    return '\t'.join(map(str, lst))
   def bed(self): #Bed copy, Bed12 only
     return bed12(self)
   
@@ -450,7 +471,7 @@ def refGene_iter(file):
     except ValueError:
       pass
     
-def refFlat_iter(file):
+def refFlat_iter(file): # GenePred with Gene Names
   for l in file:
     lst = l.strip().split()
     starts = com2tup(lst[9])
