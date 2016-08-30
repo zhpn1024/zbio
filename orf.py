@@ -1,4 +1,4 @@
-from zbio import Tools
+from zbio import tools
 
 codonSize = 3
 cstart = ['ATG']
@@ -36,16 +36,20 @@ class orf:
     return self.stop >= 0
   def __len__(self):
     if not self.is_complete() : return 0
-    return self.stop - self.start
+    #if self.stop < self.start() : print str(self)
+    return self.stop - self.start()
   def __cmp__(self, other):
-    return cmp(len(self), len(other)) or cmp(self.start,other.start)
+    return cmp(len(self), len(other)) or cmp(self.start(),other.start)
   def length(self):
     return len(self)
   def aa_len(self):
     return len(self) / codonSize
-  @property
-  def start(self):
-    return min(self.starts + self.altstarts)
+  #@property
+  def start(self, alt = True):
+    if alt : return min(self.starts + self.altstarts)
+    else :
+      if len(self.starts) > 0 : return min(self.starts)
+      else : return None
   def has_strictstart(self):
     return len(self.starts) > 0
   def is_complete(self):
@@ -69,16 +73,33 @@ class orf:
         sm = s
     if sm > 0 : return (s, self.stop)
     return None
+  def filtByLen(self, minaalen, tail = -1):
+    stop = self.stop - 3
+    if stop < 0 : stop = tail
+    if stop < 0 : return
+    th = minaalen * 3
+    rm = False
+    for i, s in enumerate(self.starts):
+      if stop - s < th : 
+        rm = True
+        break
+    if rm : self.starts[i:] = []
+    rm = False
+    for i, s in enumerate(self.altstarts):
+      if stop - s < th : 
+        rm = True
+        break
+    if rm : self.altstarts[i:] = []
 
-def allorf(seq, strand = '+') :
+def allorf(seq, strand = '+', minaalen = 0) :
   seq = seq.upper().replace('U','T')
   if strand == '+' : fr = senseframe
   elif strand == '-' : 
     fr = antiframe
-    antiseq = Tools.rc(seq)
+    antiseq = tools.rc(seq)
   else: 
     fr = frame
-    antiseq = Tools.rc(seq)
+    antiseq = tools.rc(seq)
   
   length = len(seq)
   for f in fr:
@@ -98,12 +119,15 @@ def allorf(seq, strand = '+') :
          o.altstarts.append(i)
       elif codon in cstop:
         o.stop = i + codonSize
+        o.filtByLen(minaalen = minaalen, tail = length)
         if o.has_start():
           yield o
-          o = orf(frame = f)
-def orflist(seq, strand = '+', sort = True):
+        o = orf(frame = f)
+    o.filtByLen(minaalen = minaalen, tail = length)
+    if o.has_start() : yield o
+def orflist(seq, strand = '+', sort = True, minaalen = 0):
   ol = []
-  for o in allorf(seq, strand = strand):
+  for o in allorf(seq, strand = strand, minaalen = minaalen):
     ol.append(o)
   if sort : ol.sort(reverse = True)
   return ol

@@ -2,11 +2,20 @@
 import pysam
 import bed
 
+def changechr(chr):
+  if chr.isdigit() or chr in ('X','Y','M'): return 'chr' + chr
+  elif chr == 'MT' : return 'chrM'
+  elif chr == 'chrM' : return 'MT'
+  elif chr[0:3] == 'chr' : return chr[3:]
+  else : return chr
+
 class bamfile(pysam.Samfile):
   def __repr__(self):
     return 'pysam.Samfile '+self.filename
   def fetch_reads(self, chr, start, stop, multiple_iterators=False):
-    if chr not in self.references : raise StopIteration
+    if chr not in self.references : 
+      chr = changechr(chr)
+      if chr not in self.references : raise StopIteration
     rds = self.fetch(reference=chr, start=start, end=stop, multiple_iterators=multiple_iterators)
     for read in rds:
       r = bam(read, self)
@@ -152,12 +161,14 @@ class bam():#AlignedRead
     last = -1
     for i in range(self.cdna_length()):
       pos = self.genome_pos(i, bias = 1)
+      if pos < trans.start or pos > trans.stop : continue
       i2 = trans.cdna_pos(pos)
       if i2 is None : m += 1
       else :
         if last >= 0 :
           if i2 != last + 1 :
-            m += min(i, self.cdna_length() - i, abs(i2 - last + 1))
+            m += min(i, self.cdna_length() - i, abs(i2 - last - 1))
+        else : m += min(i, i2)
         last = i2
       if m > mis : return False
     #print self, self.cigar, m
@@ -201,8 +212,11 @@ class bam():#AlignedRead
       if not self.get_tag('MD')[-2].isdigit() : return True
     return False
 def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, minMapQ = None, secondary = False):
-  if trans.chr not in bamfile.references : raise StopIteration
-  rds = bamfile.fetch(reference=trans.chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
+  chr = trans.chr
+  if chr not in bamfile.references : 
+      chr = changechr(chr)
+      if chr not in bamfile.references : raise StopIteration
+  rds = bamfile.fetch(reference=chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
   #introns = trans.introns
   for r in rds:
     read = bam(r, bamfile)

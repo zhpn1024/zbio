@@ -1,6 +1,6 @@
 from os.path import isfile
 
-def fa_iter(file):
+def faIter(file):
   id = sq = ""
   for l in file:
     l = l.strip()
@@ -14,7 +14,7 @@ def fa_iter(file):
       sq += l.replace('U','T').replace('u','t')
   yield (id,sq)
 
-class faidx:
+class Faidx:
   def __init__(self, fid, length = 0, pos = 0, ls = 0, ll = 0):
     self.id = fid
     self.length = length
@@ -43,7 +43,7 @@ class faidx:
     elif ll < self.ll : self.is_endll = True
       #print 'End: ', self.ll, ll
 
-class fa:
+class Fa:
   def __init__(self, fapath):
     self.file = open(fapath, 'r')
     idxpath = fapath + '.fai'
@@ -59,7 +59,7 @@ class fa:
         if flen > 0 : self.idxarr[-1].length = flen
         fid = l.strip().split()[0][1:]
         #print fid
-        self.idxarr.append(faidx(fid, pos = pos))
+        self.idxarr.append(Faidx(fid, pos = pos))
         flen = 0
       else : 
         ll, ls = len(l), len(l.strip())
@@ -79,7 +79,7 @@ class fa:
     for l in open(idxpath):
       lst = l.strip().split('\t')
       if len(lst) < 5 : continue
-      idx = faidx(lst[0])
+      idx = Faidx(lst[0])
       idx.length, idx.pos, idx.ls, idx.ll = map(int, lst[1:5])
       self.idx[idx.id] = idx
 

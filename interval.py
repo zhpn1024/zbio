@@ -22,7 +22,7 @@ class interval: # all intervals are supposed to be [start, end) and start should
     j = 0
     for i in range(1, len(self.lst)):
       if self.lst[i][0] < self.lst[j][1] or (adj_merge and self.lst[i][0] == self.lst[j][1]) :
-        self.lst[j][1] = self.lst[i][1]
+        if self.lst[j][1] < self.lst[i][1] : self.lst[j][1] = self.lst[i][1]
         dl.append(i)
       else : j = i
     for i in dl[::-1]: del self.lst[i]
@@ -90,12 +90,59 @@ class interval: # all intervals are supposed to be [start, end) and start should
     new = interval(itvs = lst)
     return new
     #return (self + other) - (self - other) - (other - self) # hehe
-  def is_inside(self, p, left = True, right = False) : # is p inside interval
-    for itv in self.lst:
-      if itv[0] < p < itv[1] : return True
-      if left and itv[0] == p : return True
-      if right and itv[1] == p : return True
+  def nearest(self, p): #nearest interval index in self.lst, return index, cmp(p, lst[index])
+    l = len(self.lst)
+    lasti = i = l / 2
+    i0, i1 = 0, l
+    while i0 < i1 : 
+      if self.lst[i][0] == p : break
+      if self.lst[i][0] < p : 
+        i0 = i
+      else : 
+        i1 = i
+      lasti = i
+      i = (i0 + i1) / 2
+      if i == lasti : break
+    if self.lst[i][0] <= p <= self.lst[i][1] : return i, 0
+    if self.lst[i][0] > p : return i, -1
+    if self.lst[i][1] < p : return i, 1
+    
+  def is_inside(self, p, left = True, right = False, strand = '+') : # is p inside interval
+    if len(self.lst) == 0 : return False
+    i, c = self.nearest(p)
+    if c != 0 : return False
+    if self.lst[i][0] < p < self.lst[i][1] : return True
+    if strand == '-' : 
+      tmp = left
+      left = right
+      right = tmp
+    if left and self.lst[i][0] == p : return True
+    if right and self.lst[i][1] == p : return True
     return False
+  def nearestPos(self, p, strand = '+', downstream = True):
+    i, c = self.nearest(p)
+    if c == 0 : return p
+    larger = True
+    if strand != '-' and downstream == False : larger = False
+    if strand == '-' and downstream == True :  larger = False
+    if larger : 
+      if c > 0 : plus = 1
+      else : plus = 0
+      if i + plus < len(self.lst) : return self.lst[i+plus][0]
+      else : return None
+    else : 
+      if c > 0 : minus = 0
+      else : minus = 1
+      if i - minus >= 0 : return self.lst[i-minus][1]
+      else : return None
+  def nearestStop(self, p, strand = '+', downstream = True):
+    i, c = self.nearest(p)
+    if c != 0 : return p
+    larger = True
+    if strand != '-' and downstream == False : larger = False
+    if strand == '-' and downstream == True :  larger = False
+    if larger : return self.lst[i][1]
+    else : return self.lst[i][0]
   def num_iter(self, start = None, step = 1):
     if self.rlen() <= 0 : return
     if start is None : start = self.start
@@ -132,23 +179,34 @@ def cds_region_trans(t, cds1 = None, cds2 = None):
     tl = t.cdna_length()
     cds2 = cds1 + (tl - cds1) / 3 * 3
   if cds2 - cds1 == 0 : return cr
+  wrong = False
   if (cds2 - cds1) % 3 > 0 : 
     print 'Wrong CDS : %s %s %d %d %d' % (t.gid, t.id, cds1, cds2, t.cdna_length())
-    return cr ## Wrong CDS annotation
+    wrong = True
+    #return cr ## Wrong CDS annotation
   thick = [t.genome_pos(cds1, 1), t.genome_pos(cds2, 0)]
   thick.sort()
   ts1, ts2 = thick #t.thick_start, t.thick_stop
   orf = t(start = ts1, stop = ts2)
   exons = t.exons[:]
   exons.sort()
-  df = 0
-  for e in exons:
-    for ei in e.intersect(orf):
-      f = (ei.start - df) % 3
-      cr[f].lst.append([ei.start, ei.stop])
-      df = (len(ei) + df) % 3
+  if wrong : 
+    for e in t.cds : 
+      df = int(e.frame) # Use frame annotation
+      if t.strand == '+' : df = - df
+      f = (e.end5 - df) % 3
+      cr[f].lst.append([e.start, e.stop])
+  else : 
+    df = 0
+    for e in exons:
+      for ei in e.intersect(orf):
+        f = (ei.start - df) % 3
+        cr[f].lst.append([ei.start, ei.stop])
+        df = (len(ei) + df) % 3
       #print f, df, ei
-  if df != 0 : raise Exception('Remain df is not 0 ! %s %s %d %d' % (t.gid, t.id, cds1, cds2))
+    if df != 0 : 
+      print('Remain df is not 0 ! %s %s %d %d' % (t.gid, t.id, cds1, cds2))
+      return [interval() for i in range(3)]
   for r in cr : r.check()
   return cr
 def cds_region_gene(g):

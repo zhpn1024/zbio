@@ -219,6 +219,9 @@ class readdict(dict):
     for i in self:
       s += self[i]
     return s
+  def value(self, n):
+    if n in self : return self[n]
+    else : return 0
   def mean(self):
     return 1.0 * self.sum() / self.size()
   def quantile(self, r = 0.5):
@@ -244,4 +247,15 @@ class readdict(dict):
   def record(self, read, n = 1):
     if read not in self: self[read] = 0
     self[read] += n
+  def merge(self, other):
+    for read in other : self.record(read, other[read])
+  def string(self):
+    ks = self.keys()
+    ks.sort()
+    s = '{'
+    for k in ks:
+      s += "%d:%d, " % (k, self[k])
+    s = s.rstrip(', ') + '}'
+    return s
+
         
