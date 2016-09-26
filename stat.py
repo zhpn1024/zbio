@@ -2,7 +2,7 @@ import math
 from scipy.stats import nbinom, chisquare, chisqprob
 logarr = [None] # log(N)
 logsumarr = [0] # log(N!)
-def logarr_ext(n, logarr = logarr, logsumarr = logsumarr):
+def logarr_ext(n, logarr = logarr, logsumarr = logsumarr): # prepare log values
   l = len(logarr)
   if l < n + 1 : 
     logarr += [None] * (n + 1 - l)
@@ -34,8 +34,7 @@ def load_data(arr):
     data[k] += 1
   return data
 def fisher_method(ps):
-  n = 0
-  fs = 0
+  n, fs = 0, 0
   for p in ps:
     if p is None : continue
     if p == 0 : return 0.0, -1 ###
@@ -44,21 +43,18 @@ def fisher_method(ps):
   fp = chisqprob(fs, 2 * n)
   return fp, fs
 
-def combination_log(n, k, logarr = logarr, show = False): # N choose K, log combination number, NATURAL LOG!
+def combination_log(n, k, show = False): 
+  '''N choose K, log combination number, NATURAL LOG
+  '''
   if n < 0 : return None
   if k > n or k < 0: return None #None is log(0)
-  #if k * 2 > n: k = n - k
-  #lpr = 0.0
-  nk = n - k
-  logarr_ext(n, logarr = logarr)
-  lpr = logsumarr[n] - logsumarr[k] - logsumarr[nk]
-  '''for i in range(n, nk, -1):
-    lpr += logarr[i]
-  for i in range(k, 0, -1):
-    lpr -= logarr[i]'''
+  logarr_ext(n)
+  lpr = logsumarr[n] - logsumarr[k] - logsumarr[n-k]
   return lpr
 
-def ACprob(x, y, r = 1): # p(y|x) = r^y C(x+y,y) / (1+r)^(x+y+1) , r = N2/N1 by Audic and Claverie 
+def ACprob(x, y, r = 1): 
+  '''p(y|x) = r^y C(x+y,y) / (1+r)^(x+y+1) , r = N2/N1 by Audic and Claverie 
+  '''
   lp = combination_log(x+y, x)
   lp += math.log(r) * y
   lp -= math.log(1 + r) * (1 + x + y)
@@ -77,7 +73,9 @@ def ACtest(x, y, r = 1, alt = 'auto', double = True): # Diff expression test by 
   if pv > 1 : pv = 1
   return pv
 
-def FCtest(x, y, r = 1, fc = 1.5, alt = 'auto', double = True): # Test whether exp diff > fold change (binom test). For data with no replicate|dispersion 
+def FCtest(x, y, r = 1, fc = 1.5, alt = 'auto', double = True): 
+  '''Test whether exp diff > fold change (binom test). For data with no replicate|dispersion 
+  '''
   n = x + y
   if y > 0 : fcr = 1.0 * x * r / y
   else : fcr = fc + 1 ###
@@ -93,52 +91,14 @@ def FCtest(x, y, r = 1, fc = 1.5, alt = 'auto', double = True): # Test whether e
   if double : pv *= 2  # Doubling the smaller tail
   if pv > 1 : pv = 1
   return pv
-
-def hypergeo0(N, K, n, k):
-  p = 1.0
-  nk = n - k
-  Nk = N - k
-  NK = N - K
-  NKnk1 = N - K - n + k + 1
-  Nn1 = N - n + 1
-  #pmax = 0
-  #pmin = 1
-  for i in range(k):
-    p *= float(K - i) / (N - i)
-    p *= float(n - i) / (k - i)
-    if i < nk: # j = nk - i - 1
-      p *= float(NK - i) / (Nk - i)
-      #p *= float(NKnk1 + i) / (Nn1 + i)
-    #if p > pmax: pmax = p
-    #if p < pmin: pmin = p
-  #print p, pmax, pmin
-  for i in range(k, nk):
-    p *= float(NK - i) / (Nk - i)
-    #p *= float(NKnk1 + i) / (Nn1 + i)
-  return p
-
-def hypergeo1(N, K, n, k):
-  p = 1.0
-  NK = N - K
-  nk = n - k
-  Knk = K + n - k 
-  Nnk = N - n + k
-  for i in range(nk):
-    p *= float(NK - i) / (N - i)
-    p *= float(n - i) / (nk - i)
-    if i < k:
-      p *= float(K - i) / (Nnk - i)
-  #print p
-  for i in range(nk, k):
-    p *= float(K - i) / (Nnk - i)
-  #for i in range(nk, n):
-    #p *= float(Knk - i) / (N - i)
-    #p *= float(n - i) / (n - i)
-  return p
     
+def hypergeo_log(N, K, n, k): 
+  return combination_log(K, k) + combination_log(N-K, n-k) - combination_log(N, n)
+
 def hypergeo(N, K, n, k):
-  if k >= n / 2 : return hypergeo0(N, K, n, k)
-  else: return hypergeo1(N, K, n, k)
+  lp = hypergeo_log(N, K, n, k)
+  if lp is None : return 0
+  return math.exp(lp)
   
 def binomial(k, n, p = 0.5, show=False):
   if k > n or k < 0: return 0
@@ -151,7 +111,7 @@ def binomial(k, n, p = 0.5, show=False):
   pr = 1.0
   nk = n - k
   if k == 0 : return q ** n
-  t = nk / k
+  t = int(nk / k)
   if t * k < nk: t += 1
   qi = 0
   for i in range(k):
@@ -164,72 +124,55 @@ def binomial(k, n, p = 0.5, show=False):
       pi *= q
       qi += 1
     pr *= pi
-    if show: print pr
+    if show: print (pr)
   return pr
-def binom_log(k, n, p = 0.5, logarr = logarr, show = False): #log probability value
+def binom_log(k, n, p = 0.5, show = False): #log probability value
   if n < 0 : return None
   if k > n or k < 0: return None #None is log(0)
-  if p < 0 : p = 0
-  if p > 1 : p = 1
-  if k * 2 > n:
-    k = n - k
-    p = 1 - p
-  q = 1 - p
-  if p == 0 :
-    if k == 0 : return 0
+  if p <= 0 :
+    if k == 0 : return 0 # log(1)
     else : return None
-  elif q == 0 : return None
-  lpr = 0.0
-  lp = math.log(p)
-  lq = math.log(q)
-  nk = n - k
-  #if k == 0 : return  lq * n
-  lpr += lp * k + lq * nk
+  elif p >= 1 : 
+    if k == n : return 0
+    else : return None
+  #q = 1 - p
+  lpr = math.log(p) * k + math.log(1-p) * (n-k)
   lpr += combination_log(n, k)
-  '''logarr_ext(n, logarr = logarr)
-  for i in range(k):
-    lpr += logarr[n - i] - logarr[k - i]'''
   return lpr
-def binom_test(k, n, p = 0.5, alt = "g", log = True, logarr = logarr, show=False): # No two sided yet!
-  if not log : return binomTest0(k, n, p, alt, show) # if log, p are calculated with log10 values
-  #logarr = [None] * (n + 1)
-  #logarr_ext(n, logarr = logarr)
-  lpk = binom_log(k, n, p, logarr)
-  if show : print lpk
+def binom_test(k, n, p = 0.5, alt = "g", log = True, show=False): 
+  '''binomial test, no two sided yet!
+  '''
+  if not log : return binomTest0(k, n, p, alt, show) # if log, p are calculated with log values
+  lpk = binom_log(k, n, p)
+  if show : print (lpk)
   if lpk is None : 
     if alt[0] == 'g' and p >= 1: return 1
     if alt[0] != 'g' and p <= 0: return 1
     return 0
   elif lpk == 0 : return 1
-  #if k == 0 and alt[0] == 'g' : return 1
-  #if k == n and alt[0] != 'g' : return 1
   pv = math.exp(lpk) ### log reverse
   q = 1 - p
   lp = math.log(p)
   lq = math.log(q)
   if alt[0] == 'g':
     for i in range(k, n):
-      lpk += lp + logarr[n - i] - lq - logarr[i + 1]
-      #r = p * (n - i) / q / (i + 1)
-      #pk *= r
+      lpk += lp + logarr[n - i] - lq - logarr[i + 1] #r = p * (n - i) / q / (i + 1)
       pv += math.exp(lpk)
   else:
     for i in range(k, 0, -1):
-      lpk += lq + logarr[i] - lp - logarr[n - i + 1]
-      #r = q * i / p / (n - i + 1)
-      #pk *= r
+      lpk += lq + logarr[i] - lp - logarr[n - i + 1] #r = q * i / p / (n - i + 1)
       pv += math.exp(lpk)
   return pv
 def binomTest0(k, n, p = 0.5, alt = "g", show=False): # No two sided yet!
+  '''binomial test no log version
+  '''
   pk = binomial(k, n, p)
-  if show : print pk
+  if show : print (pk)
   if pk == 1 : return 1
   if pk == 0 : 
     if alt[0] == 'g' and p >= 1: return 1
     if alt[0] != 'g' and p <= 0: return 1
     return 0
-  #if k == 0 and alt[0] == 'g' : return 1
-  #if k == n and alt[0] != 'g' : return 1
   pv = pk
   q = 1 - p
   if alt[0] == 'g': 
@@ -244,7 +187,11 @@ def binomTest0(k, n, p = 0.5, alt = "g", show=False): # No two sided yet!
       pk *= r
       pv += pk
   return pv
-class negbinom: #Number of 'failures' before 'r' 'successes' with success probability 'p'
+class NegBinom: 
+  '''Negative binomial distribution
+  Number of 'failures' before 'r' 'successes' with success probability 'p'
+  Note that when p is higher, the expect is lower, consistent with nbinom in scipy.stats.
+  '''
   rMax = 1e8
   rMin = 1e-8
   Delta = 1e-8
@@ -281,6 +228,8 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
     return p
       
   def estimate(self, data): #data dict value:counts
+    '''estimate parameters from input data (dict type, value -> counts)
+    '''
     total, cnt = data_count(data)
     rmax, rmin = self.rMax, self.rMin
     rmid = math.sqrt(rmax * rmin)
@@ -304,43 +253,40 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
       score += data[k] * self.logpmf(k)
     return score
   def r_log_like_score(self, data, r = -1):
+    '''log likelyhood score as function of r
+    '''
     if r < 0 : r = self.r
     total, cnt = data_count(data)
-    #dr = scipy.special.digamma(r)
-    #score = math.log(self.q) - dr
     s1, d = 0, 0
     for i in range(max(data.keys()) + 1):
-      #d += 1.0 / (r + i)
       if i in data : s1 += d * data[i]
       d += 1.0 / (r + i)
     score = s1 / cnt + math.log(r / (r + 1.0*total/cnt))
     return score
   def expected(self, k, size):
+    ''' expected number under given sample size
+    '''
     p = self.pmf(k)
     return size * p
-  def estimate_truncated(self, data, size, max_iter = 1e4, nlike = 10, report = False): # Not finished!
+  def estimate_truncated(self, data, size, max_iter = 1e4, nlike = 10, report = False): 
+    '''estimate with truncated data. Not finished!
+    '''
     total, cnt = data_count(data)
     lastllh = 0
     i = 0
     km = max(data)
-    #d = {}
-    #for k in data : d[k] = data[k]
     for j in range(int(max_iter)) :
       ps = 0
       for k in data : ps += self.pmf(k)
       #size = round(total / ps)
       k = 0
+      # generate expected full data
       d = {}
-      #ek = self.expected(k, size)
       while k <= km or d[k-1] >= 1 : 
         if k in data : d[k] = data[k]
-        else : d[k] = round(self.expected(k, size))
+        else : d[k] = round(self.expected(k, size)) ## round?
         k += 1
-        #if k > km : print k, d[k]
-      #ez = self.expected_zeros(cnt)
-      #data[0] = ez
       self.estimate(d)
-      #data[0] = 0
       i += 1
       if i < nlike : continue
       i = 0
@@ -348,19 +294,22 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
       diff = abs(2 * (llh - lastllh) / (llh + lastllh) / nlike)
       if diff < self.Delta : break
       if report : 
-        print diff, llh, self.r, self.p, k, size,
-        for i in range(15) : print '%d:%d' % (i, d[i]),
-        print '...'
+        s = '{} {} {} {} {} {}'.format(diff, llh, self.r, self.p, k, size)
+        for i in range(15) : s += ' %d:%d' % (i, d[i])
+        s += '...'
+        print(s)
       lastllh = llh
     return self.r, self.p
   def estimate_by_012(self, n0, n1, n2, start = 0) : 
+    '''estimate by first 3 numbers
+    '''
     r1 = (start + 1) * float(n1) / n0 
     r2 =  (start + 2) * float(n2) / n1
     p1 = r2 - r1
     self.p = 1 - p1 # 
     self.r = (r1 - start * p1) / p1
     return self.r, self.p
-  def fit_lower(self, data, nmax = 40, pth = 0.01, start = 0) : 
+  def fit_lower(self, data, nmax = 40, pth = 0.01, start = 0) : # in test, not used
     r, p = self.estimate_by_012(data[start], data[start+1], data[start+2], start = start)#, nlike=100)
     if r > 0 and 0 < p < 0.9 : 
       #self.r, self.p = r, p
@@ -388,7 +337,7 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
         rst = leastsq(res, [1,1], args=(xa, ya))
         p = 1 - rst[0][0]
         r = rst[0][1] / rst[0][0]
-        print i, (r, p), len(xl), w#, y
+        print (i, (r, p), len(xl), w)#, y
         if r <= 0 or p >= 1 or p <= 0 : continue
         if 0.2 < p < 1 : break
         self.r, self.p = r, p
@@ -399,15 +348,15 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
         pv1 = binom_test(data.value(i+1), s+data.value(i+1), p = f1, alt = 'g')
         pv2 = binom_test(data.value(i+2), s+data.value(i+1)+data.value(i+2), p = f2, alt = 'g')
         #for j in range(i) : print j, self.pmf(j),
-        print data.value(i+1), s+data.value(i+1), f1, 'pv1 =', pv1
-        print data.value(i+2), s+data.value(i+1)+data.value(i+2), f2, 'pv2 =', pv2
+        print (data.value(i+1), s+data.value(i+1), f1, 'pv1 =', pv1)
+        print (data.value(i+2), s+data.value(i+1)+data.value(i+2), f2, 'pv2 =', pv2)
         #fp, fs = fisher_method([pv1, pv2])
         fp = max(pv1, pv2)
         #print fp
         if fp < pth : break #and pv2 < pth : break
       self.r, self.p = r, p
       return r, p
-  def fit_linear(self, data, poisson = False, maxi = 40, minc = 3, start = 0, total = None, show = False) : 
+  def fit_linear(self, data, poisson = False, maxi = 40, minc = 3, start = 0, total = None, show = False) : # in test, not used
     if poisson : N2 = 0
     else : 
       if total is None : total = sum(data.values())
@@ -427,8 +376,9 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
     c1, c2, c3, c4, c5 = 0,0,0,0,0
     a, b = {}, {}
     r, p = {}, {}
-    ia = rate.keys()
-    ia.sort()
+    #ia = rate.keys()
+    #ia.sort()
+    ia = sorted(rate)
     for n, i in enumerate(ia) : 
       c1 += 1 / rvar[i]
       c2 += i / rvar[i]
@@ -440,7 +390,7 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
         b[i] = (c2 * c4 - c1 * c5) / (c2 * c2 - c1 * c3)
         p[i] = 1 - b[i]
         r[i] = a[i] / b[i] + 1
-        if show : print i, a[i], b[i], r[i], p[i]
+        if show : print (i, a[i], b[i], r[i], p[i])
     self.r, self.p = r[i], p[i]
     return a, b, r, p, rate, rvar
     r, p = self.estimate_by_012(data[start], data[start+1], data[start+2], start = start)#, nlike=100)
@@ -470,7 +420,7 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
         rst = leastsq(res, [1,1], args=(xa, ya))
         p = 1 - rst[0][0]
         r = rst[0][1] / rst[0][0]
-        print i, (r, p), len(xl), w#, y
+        print (i, (r, p), len(xl), w) #, y
         if r <= 0 or p >= 1 or p <= 0 : continue
         if 0.2 < p < 1 : break
         self.r, self.p = r, p
@@ -481,8 +431,8 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
         pv1 = binom_test(data.value(i+1), s+data.value(i+1), p = f1, alt = 'g')
         pv2 = binom_test(data.value(i+2), s+data.value(i+1)+data.value(i+2), p = f2, alt = 'g')
         #for j in range(i) : print j, self.pmf(j),
-        print data.value(i+1), s+data.value(i+1), f1, 'pv1 =', pv1
-        print data.value(i+2), s+data.value(i+1)+data.value(i+2), f2, 'pv2 =', pv2
+        print (data.value(i+1), s+data.value(i+1), f1, 'pv1 =', pv1)
+        print (data.value(i+2), s+data.value(i+1)+data.value(i+2), f2, 'pv2 =', pv2)
         #fp, fs = fisher_method([pv1, pv2])
         fp = max(pv1, pv2)
         #print fp
@@ -507,24 +457,28 @@ class negbinom: #Number of 'failures' before 'r' 'successes' with success probab
     #exs.append(ex)
     obs[-1] += ob
     exs[-1] += ex
-    print obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs)
+    print (obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs))
     return chisquare(obs, exs)
   
-class ztnb(negbinom):
+class ZTNB(NegBinom):
+  '''Zero truncated negative binomial
+  '''
   def logpmf(self, k = 1):
-    if k < 1 : return negbinom.pmf(self, -1)
-    p0 = negbinom.pmf(self, 0)
-    lp = negbinom.logpmf(self, k)
+    if k < 1 : return NegBinom.pmf(self, -1)
+    p0 = NegBinom.pmf(self, 0)
+    lp = NegBinom.logpmf(self, k)
     return lp - math.log(1 - p0)
   def pmf(self, k = 1):
     if k < 1 : return 0
-    p0 = negbinom.pmf(self, 0)
-    p = negbinom.pmf(self, k)
+    p0 = NegBinom.pmf(self, 0)
+    p = NegBinom.pmf(self, k)
     return p / (1- p0)
   def expected_zeros(self, size):
-    p0 = negbinom.pmf(self, 0)
+    p0 = NegBinom.pmf(self, 0)
     return size * p0 / (1 - p0)
   def estimate(self, data, max_iter = 1e4, nlike = 10, report = False):
+    '''estimate ZTNB parameters from input data (dict type, value -> counts)
+    '''
     d1 = {}
     for i in data : 
       if i > 0 : d1[i] = data[i]
@@ -534,7 +488,7 @@ class ztnb(negbinom):
     for j in range(int(max_iter)) :
       ez = self.expected_zeros(cnt)
       d1[0] = ez
-      negbinom.estimate(self, d1)
+      NegBinom.estimate(self, d1)
       d1[0] = 0
       i += 1
       if i < nlike : continue
@@ -542,39 +496,39 @@ class ztnb(negbinom):
       llh = self.log_likelihood(d1)
       d = abs(2 * (llh - lastllh) / (llh + lastllh) / nlike)
       if d < self.Delta : break
-      if report : print d, llh, self.r, self.p, ez
+      if report : print (d, llh, self.r, self.p, ez)
       lastllh = llh
     return self.r, self.p
   def pvalue(self, k = 1):
     if k <= 1 : return 1
-    p0 = negbinom.pmf(self, 0)
-    p = negbinom.pvalue(self, k)
+    p0 = NegBinom.pmf(self, 0)
+    p = NegBinom.pvalue(self, k)
     return p / (1- p0)
   def expect(self):
-    p0 = negbinom.pmf(self, 0)
-    return negbinom.expect(self) / (1 - p0)
+    p0 = NegBinom.pmf(self, 0)
+    return NegBinom.expect(self) / (1 - p0)
   def variance(self):
-    nb = negbinom(self.r, self.p)
+    nb = NegBinom(self.r, self.p)
     p0 = nb.pmf(0)
     return (nb.variance() + nb.expect() ** 2) / (1 - p0) - self.expect() ** 2
     #return self.expect / self.p
 
-class poisson: # Poisson distribution
+class Poisson: 
+  '''Poisson distribution
+  '''
   lMax = 1e8
   lMin = 1e-8
   Delta = 1e-8
   def __init__(self, l = 1.0):
-    self.l = l
+    self.l = l # lambda
   def expect(self):
     return self.l
   def variance(self):
     return self.l
-  def logpmf(self, k = 0, logarr = logarr):
-    logarr_ext(k, logarr = logarr)
+  def logpmf(self, k = 0):
+    logarr_ext(k)
     lpr = k * math.log(self.l) - self.l
     lpr -= logsumarr[k]
-    #for i in range(k):
-      #lpr -= logarr[k - i]
     return lpr
   def pmf(self, k = 0):
     return math.exp(self.logpmf(k))
@@ -591,6 +545,8 @@ class poisson: # Poisson distribution
   def pvalue(self, k = 0):
     return 1 - self.cdf(k-1)
   def estimate(self, data): #data dict value:counts
+    '''estimate Poisson parameter from input data (dict type, value -> counts)
+    '''
     total, cnt = data_count(data)
     self.l = float(total) / cnt
     return self.l
@@ -619,20 +575,22 @@ class poisson: # Poisson distribution
     ex = cnt * self.pvalue(i0)
     obs[-1] += ob
     exs[-1] += ex
-    print obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs)
+    print (obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs))
     return chisquare(obs, exs)
 
-class ztpoisson: #Zero truncated poisson distribution
+class ZTPoisson(Poisson): 
+  '''Zero truncated poisson distribution, NOT finished!
+  '''
   def expect(self):
-    p0 = poisson.pmf(self, 0)
+    p0 = Poisson.pmf(self, 0)
     return self.l / (1 - p0)
   def variance(self):
-    p0 = poisson.pmf(self, 0)
+    p0 = Poisson.pmf(self, 0)
     return (self.l + self.l ** 2) / (1 - p0) - self.expect() ** 2
   def logpmf(self, k = 0):
-    if k < 1 : return negbinom.pmf(self, -1)
-    p0 = math.exp(poisson.logpmf(self, 0))
-    lp = poisson.logpmf(self, k)
+    if k < 1 : return Poisson.pmf(self, -1)
+    p0 = math.exp(Poisson.logpmf(self, 0))
+    lp = Poisson.logpmf(self, k)
     return lp - math.log(1 - p0)
   #def pmf(self, k = 0):
     #return math.exp(self.logpmf(k))
@@ -648,7 +606,7 @@ class ztpoisson: #Zero truncated poisson distribution
     return cdf
   #def pvalue(self, k = 0):
     #return 1 - self.cdf(k - 1)
-  def estimate(self, data, max_iter = 1e4, nlike = 10): ######
+  def estimate(self, data, max_iter = 1e4, nlike = 10): ###### NOT FINISHED!!
     total, cnt = data_count(data)
     lastllh = 0
     i = 0
@@ -663,7 +621,7 @@ class ztpoisson: #Zero truncated poisson distribution
       llh = self.log_likelihood(data)
       d = abs(2 * (llh - lastllh) / (llh + lastllh) / nlike)
       if d < self.Delta : break
-      print d, llh, self.r, self.p, ez
+      print (d, llh, self.r, self.p, ez)
       lastllh = llh
     return self.r, self.p
   def log_likelihood(self, data):
@@ -701,11 +659,15 @@ class ztpoisson: #Zero truncated poisson distribution
     #exs.append(ex)
     obs[-1] += ob
     exs[-1] += ex
-    print obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs)
+    print (obs, exs, len(obs) - 1, len(exs), sum(obs), sum(exs))
     return chisquare(obs, exs)
 
-class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
+class rankSumTiesExact: 
+  '''exact rank sum test of x < y (one-sided) for ribo
+  '''
   def __init__(self, x, y, show = False):
+    '''x, y are list of samples
+    '''
     self.a = list(x) + list(y)
     self.x = list(x)
     self.N, self.n = len(self.a), len(x)
@@ -713,15 +675,11 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
     self.xcd = countDict(x)
     self.rd = rankDict(self.cd)
     self.xrs =  self.rankSum(self.xcd)
-    self.ks = self.cd.keys()
-    self.ks.sort()
+    self.ks = sorted(self.cd)
     self.l = len(self.ks)
     self.vs = [self.count(i) for i in range(self.l)]
     if show : 
-      print self.cd, self.xcd
-      print self.tieRatio()
-      print self.complexity()
-      #print self.numStats()
+      print (self.cd, self.xcd, self.complexity()) #print (self.tieRatio()) print (self.complexity()) #print self.numStats()
   def copy(self, other):
     self.a = other.a
     self.x = other.x
@@ -734,6 +692,8 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
     self.l = other.l
     self.vs = other.vs
   def complexity(self):
+    '''sum of log(n+1) for each ties
+    '''
     logarr_ext(max(self.cd.values()) + 1)
     complog = sum([logarr[self.count(i)+1] for i in range(self.l)])
     return complog
@@ -746,7 +706,8 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
       rcd = countDict(a[0:self.n])
       rs =  self.rankSum(rcd)
       if rs >= self.xrs: c += 1
-      if show : print a, rs, xrs, c
+      if show : print (a, rs, xrs, c)
+      #if c >= 100 : return float(c) / (i+1) # 2 effective numbers
     #if i == 19 and c > 10 : return float(c) / 20
     #if i == 99 and c > 20 : return float(c) / 100
     return float(c) / n
@@ -757,7 +718,7 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
   def numStats(self):
     logarr_ext(max(self.cd.values()) + 1)
     return self._numStats(self.N, self.n, 0)
-  def _numStats(self, N, n, i):
+  def _numStats(self, N, n, i): # NOT CORRECT!!
     n1 = N - n
     if n < 0 or n1 < 0 : return 0
     if n == 0 or n1 == 0 : return 1
@@ -774,38 +735,40 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
       s += d
       #print d,s,N - ni, n - ni, i+1
     return s
-  def numStatsRaw(self):
-    p = float(self.n) / self.N
-    r = p * (1-p)
+  def numStatsRaw(self): # use complexity() instead
     s = 1
-    for i in range(self.l) : 
-      #var = self.count(i) * r
-      #sd = var ** 0.5
-      #s *= sd * 2
+    for i in range(self.l) :
       s *= self.count(i) + 1
     return s
   def tieRatio(self):
+    '''tie correction ratio
+    '''
     s = sum([v**3 - v for v in self.cd.values() if v > 1])
     return s / float(self.N ** 3 - self.N)
   def test(self, th = 20, delta = 1e-4):
-    if self.n <= th or self.N - self.n <= th : return self.fastTest(delta = delta)
-    if self.complexity() <= 2 * th * logarr[2] : return self.fastTest(delta = delta)
-    return self.mwtest()
+    '''if either size <= th, use fastTest
+    elif complexity <= th, use fastTest
+    else use normal mwtest
+    '''
+    if self.n <= th or self.N - self.n <= th : return self.fastTest(delta = delta) #, True
+    if self.complexity() <= 2 * th * logarr[2] : return self.fastTest(delta = delta) #, True
+    return self.mwtest() #, False
   def mwtest(self, use_continuity = True, show = False):
+    '''normal mwtest, alt = greater, one-tailed
+    '''
     from scipy.stats import norm
     n1, n2, n = self.n, self.N - self.n, self.N
     mu = n1 * (n + 1) / 2.0
     s = sum([v**3 - v for v in self.cd.values() if v > 1])
-    if show : print 'effect size', n - s / float(n*(n-1))
+    if show : print ('effect size {}'.format(n - s / float(n*(n-1))))
     var = n1 * n2 * (n ** 3 - n - s) / 12.0 / n / (n - 1)
-    #print n, s, var, n1, self.cd
     if use_continuity : z = (self.xrs - mu - 0.5) / var ** 0.5
     else : z = (self.xrs - mu) / var ** 0.5
-    p = norm.sf(abs(z))
-    if show : print self.xrs, mu, self.xrs-mu+n1*(n1+1)/2.0, var, z, p
-    if z >= 0 : return p
-    else : return 1 - p # one sided
-  def isExtreme(self, rs, twotailed = False, alt = 'g', delta = 1e-5): # if the given rank sum is farther than xrs
+    p = norm.sf(z)
+    if show : print (self.xrs, mu, self.xrs-mu+n1*(n1+1)/2.0, var, z, p)
+    return p
+    #else : return 1 - p # one sided
+  def isExtreme(self, rs, twotailed = False, alt = 'g', delta = 1e-5): # not used. if the given rank sum is farther than xrs
     if twotailed : 
       if not hasattr(self, 'mu'):
         n1, n2, n = self.n, self.N - self.n, self.N
@@ -815,6 +778,8 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
     elif alt == 'g' : return rs >= self.xrs - delta
     else : return rs <= self.xrs + delta
   def exactTest(self, twotailed = False, show = False): 
+    '''get exact p-value for ranksum permutation test, time consuming.
+    '''
     pval = 0
     if twotailed : 
       n1, n2, n = self.n, self.N - self.n, self.N
@@ -828,16 +793,18 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
       elif prs < self.xrs - 0.0001 : continue
       p = multiHypergeoProb(pcd, self.cd)
       pval += p
-      if show : print prs, pcd, p
+      if show : print (prs, pcd, p)
     if pval > 1.0 : pval = 1.0
     return pval
   def fastTest(self, show = False, delta = 1e-4):
+    '''fast version of exactTest, reduced time at some cost of accuracy.
+    '''
     self.pval = 0
     self.lp0 = - combination_log(self.N, self.n)
     for pcd in self.multiHypergeoFastIter(self.n, (), 0, self.N, 0, delta=delta):
       p = multiHypergeoMergeProb(pcd, self.cd, self.N, self.n, lp0 = self.lp0) # merged probability
       self.pval += p
-      if show : print p, pcd
+      if show : print (p, pcd)
     if self.pval > 1.0 : self.pval = 1.0
     return self.pval
   def multiHypergeoIter(self, n, vs, i, N):
@@ -851,13 +818,10 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
       for j in range(max(0, n-N1), min(n, self.count(i)) + 1):
         for pcd in self.multiHypergeoIter(n-j, vs+(j,), i+1, N1):
           yield pcd
-  def multiHypergeoFastIter(self, n, vs, i, N, rs, delta=1e-4): # fast iter, only select rank sum higher than x rank sum conditions
-    #if i <= 2 : print n, vs, i, N, rs, self.pval
+  def multiHypergeoFastIter(self, n, vs, i, N, rs, delta=1e-4): 
+    '''fast iter, only select rank sum higher than x rank sum conditions
+    '''
     if n > N : return # impossible
-    #rsu, rsd = self.rankSumUpDownLimit(vs, rs)
-    #print rsu, rsd, rs, self.xrs
-    #if rsu < self.xrs : return # lower conditions
-    #elif rsd >= self.xrs : yield zipDict(self.ks, vs) # good enough
     elif n == 0 : yield zipDict(self.ks, vs) # no more, return
     elif i + 1 == len(self.ks) : # the last key
       if n <= self.count(i) : yield zipDict(self.ks, vs + (n,))
@@ -868,39 +832,24 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
       rsu, rsd = {}, {}
       j1, j2 = jd, ju
       while j1 < j2 : # looking for threshold of all lower conditions
-        j = (j1 + j2) / 2 # + 1 for upper int
+        j = (j1 + j2) // 2 # + 1 for upper int
         rsu[j] = self.rankSumUpLimit(vs+(j,), rs+j*self.rank(i))
         if rsu[j] < self.xrs - 0.0001 : j2 = j # only keep possible conditions
         else : j1 = j + 1
       ju = j1
       j1, j2 = jd, ju
       while j1 < j2 : # looking for threshold of all higher conditions
-        j = (j1 + j2) / 2 # + 1 for upper int
+        j = (j1 + j2) // 2 # + 1 for upper int
         rsd[j] = self.rankSumDownLimit(vs+(j,), rs+j*self.rank(i))
         if rsd[j] >= self.xrs - 0.0001 : j1 = j + 1 # only keep partial possible conditions
         else : j2 = j
       for j in range(jd, j1) : yield zipDict(self.ks, vs+(j,))
-      #allgood = False
-      #print j1, jd, ju
       ps = [multiHypergeoMergeProb(zipDict(self.ks, vs+(j,)), self.cd, self.N, self.n, lp0=self.lp0) for j in range(j1, ju)]
       for jo in orderIter(ps, reverse = True): #range(j1, ju):
         j = j1 + jo
-        '''if allgood : yield zipDict(self.ks, vs+(j,))
-        else : 
-          vsj, rsj = vs+(j,), rs+j*self.rank(i)
-          rsd = self.rankSumDownLimit(vsj, rsj)
-          if rsd >= self.xrs : 
-            allgood = True
-            yield zipDict(self.ks, vsj)
-          else :'''
         vsj, rsj = vs+(j,), rs+j*self.rank(i)
-        #p = multiHypergeoMergeProb(zipDict(self.ks, vsj), self.cd, self.N, self.n, lp0 = self.lp0) 
-        if self.pval > 0 and ps[jo] / self.pval < delta : # break # whether prob. high enough to calculate in detail
-          #if j not in rsu : rsu[j] = self.rankSumUpLimit(vs+(j,), rs+j*self.rank(i))
-          #if j not in rsd : rsd[j] = self.rankSumDownLimit(vs+(j,), rs+j*self.rank(i))
-          #ratio = (rsu[j] + 1 - self.xrs) / (rsu[j] + 1 - rsd[j])
-          #self.pval += ps[jo] * ratio # / 2 # * ratio # 1st order proximation
-          self.pval += ps[jo] / 2
+        if self.pval > 0 and ps[jo] / self.pval < delta : # whether prob. high enough to calculate in detail
+          self.pval += ps[jo] / 2 # 0 order approximation; ps[jo] * ratio # 1st order approximation
         else :
           for pcd in self.multiHypergeoFastIter(n-j, vsj, i+1, N1, rsj, delta=delta):
             yield pcd
@@ -926,14 +875,17 @@ class rankSumTiesExact: # exact rank sum test of x < y (one-sided) for ribo
       i += 1
     return rs
 def countDict(arr):
+  '''count array to dict
+  '''
   data = {}
   for d in arr:
     if d not in data : data[d] = 0
     data[d] += 1
   return data
 def rankDict(data):
-  ks = data.keys()
-  ks.sort()
+  '''count array to rank dict
+  '''
+  ks = sorted(data)
   total = 0
   rd = {}
   for k in ks:
@@ -947,13 +899,13 @@ def zipDict(ks, vs):
   return data
 
 def orderIter(arr, reverse = False):
+  '''generate order of given array. e.g. the index of smallest item come first
+  '''
   ad = {}
   for i, v in enumerate(arr): 
     if v not in ad : ad[v] = []
     ad[v].append(i)
-  #print ad
-  a = ad.keys()
-  a.sort(reverse = reverse)
+  a = sorted(ad, reverse = reverse)
   for v in a : 
     for i in ad[v] : yield i
 
@@ -961,29 +913,32 @@ def order(arr, reverse = False):
   return [i for i in orderIter(arr, reverse = reverse)]
 
 def multiHypergeoProb(pcd, cd, show = False):
+  '''pmf of multi-hypergeomic distribution, cd provides total numbers, pcd provides selected numbers
+  '''
   lp = - combination_log(sum(cd.values()), sum(pcd.values()))
-  if show : print sum(cd.values()), sum(pcd.values()), lp
+  if show : print (sum(cd.values()), sum(pcd.values()), lp)
   for k in pcd :
     lp += combination_log(cd[k], pcd[k])
-    if show : print cd[k], pcd[k], lp
+    if show : print (cd[k], pcd[k], lp)
   return math.exp(lp)
 def multiHypergeoMergeProb(pcd, cd, N, n, lp0 = None, show = False):
+  '''keys not in pcd/cd are not considered. total numbers are provided by N & n
+  '''
   if lp0 is None : lp = - combination_log(N, n)
   else : lp = lp0
-  if show : print lp
-  #m = max(pcd)
-  #for k in cd :
-    #if k > m : break
-
+  if show : print (lp)
   for k in pcd :
     lp += combination_log(cd[k], pcd[k])
     n -= pcd[k]
     N -= cd[k]
-    if show : print cd[k], pcd[k], N, n, lp
+    if show : print (cd[k], pcd[k], N, n, lp)
   lp += combination_log(N, n)
   return math.exp(lp)
 
 def glmNBTest(x, y):
+  '''test difference of two array of counts by generized linear model with negative binomial family
+  require statsmodels module
+  '''
   import statsmodels.formula.api as smf
   import statsmodels.api as sm
   if max(x) == 0 : return 1.

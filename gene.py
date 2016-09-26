@@ -4,7 +4,7 @@ Sym = ['SYM','SYMBOL','NAME']
 Ali = ['ALI','ALIAS','ALIASES','SYNONYM','SYNONYMS']
 Ens = ['ENS','ENSEMBL','ENSG']
 Full = ['FULL','FULLNAME']
-class gene():
+class Gene():
   def __init__(self, l, sep = '\t', idx = [1,2,4,5,8,0]):
     lst = l.strip().split(sep)
     self.gid = lst[idx[0]]
@@ -39,7 +39,7 @@ class gene():
     elif name in self.attr:
       return self.attr[name]
     else:
-      raise AttributeError, name
+      raise AttributeError(name)
 
 class geneDict():
   identifier = ('GeneID', 'Symbol', 'Ensembl')
@@ -54,7 +54,7 @@ class geneDict():
     neg = {}
     for l in ginfofile:
       if l[0] == '#' : continue
-      g = gene(l, sep)
+      g = Gene(l, sep)
       if lastsp != g.taxid and lastsp != '':
         if g.taxid not in neg:
           sys.stderr.write("Warning: There may be more than one species in gene_info file! Neglected: "+g.taxid+"\n")

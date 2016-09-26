@@ -23,10 +23,10 @@ class table():
   def load(self, infile, header = True, rowname = False, sep = '\t', n = -1, skip = 0, innerskip = []):
     i = 0
     while i < skip: 
-      l = infile.next()
+      l = next(infile)
       i += 1
     if header :
-      l = infile.next()
+      l = next(infile)
       i += 1
       lst = l.strip('\n').split(sep)
       self.colnames = lst
@@ -43,16 +43,16 @@ class table():
     self.check()
   def check(self, silent = True):
     self.nrow = len(self.matrix)
-    if not silent : print 'nrows =', self.nrow,
+    if not silent : print ('nrows = {}'.format(self.nrow))
     cols = [len(lst) for lst in self.matrix]
     self.ncol = max(cols)
     mincol = min(cols)
     if mincol != self.ncol :
       self.is_neat = False
-      if not silent : print ', mincols =', mincol, ', maxcols =', self.ncol, ', NOT neat!'
+      if not silent : print (', mincols =', mincol, ', maxcols =', self.ncol, ', NOT neat!')
     else :
       self.is_neat = True
-      if not silent : print ', ncols =', self.ncol, ', neat.'
+      if not silent : print (', ncols =', self.ncol, ', neat.')
   def __repr__(self):
     s = "nrows = %d, ncols = %d" % (self.nrow, self.ncol)
     if self.is_neat: s += ', neat!\n'
@@ -67,7 +67,7 @@ class table():
     else : ncol = min(ncol, self.ncol)
     s = ''
     if header : 
-      if len(self.colnames) == 0 :colnames = range(ncol)
+      if len(self.colnames) == 0 :colnames = list(range(ncol))
       else : colnames = self.colnames
       if rowname : s += sep
       s += sep.join([str(x) for x in colnames[0:ncol]]) + '\n'

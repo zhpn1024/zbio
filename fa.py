@@ -14,8 +14,24 @@ def faIter(file):
       sq += l.replace('U','T').replace('u','t')
   yield (id,sq)
 
+def rc(seq):
+  '''reverse complement
+  '''
+  comps = {'A':"T", 'C':"G", 'G':"C", 'T':"A",
+       'B':"V", 'D':"H", 'H':"D", 'K':"M",
+       'M':"K", 'R':"Y", 'V':"B", 'Y':"R",
+       'W':'W', 'N':'N', 'S':'S'}
+  return ''.join([comps[x] for x in seq.upper()[::-1]])
+
+
 class Faidx:
+  '''index for genome fasta file
+  '''
   def __init__(self, fid, length = 0, pos = 0, ls = 0, ll = 0):
+    '''
+    ls : sequence length in one line
+    ll : line length
+    '''
     self.id = fid
     self.length = length
     self.pos = pos
@@ -44,6 +60,8 @@ class Faidx:
       #print 'End: ', self.ll, ll
 
 class Fa:
+  '''indexed genome fasta file
+  '''
   def __init__(self, fapath):
     self.file = open(fapath, 'r')
     idxpath = fapath + '.fai'
@@ -71,7 +89,7 @@ class Fa:
     outfile = open(idxpath, 'w')
     self.idx = {}
     for i, idx in enumerate(self.idxarr):
-      print >>outfile, idx
+      outfile.write('{}\n'.format(idx)) # print >>outfile, idx
       self.idx[idx.id] = idx
     outfile.close()
   def load_idx(self, idxpath):
@@ -80,7 +98,7 @@ class Fa:
       lst = l.strip().split('\t')
       if len(lst) < 5 : continue
       idx = Faidx(lst[0])
-      idx.length, idx.pos, idx.ls, idx.ll = map(int, lst[1:5])
+      idx.length, idx.pos, idx.ls, idx.ll = list(map(int, lst[1:5]))
       self.idx[idx.id] = idx
 
   def seekpos(self, fid, p):
@@ -111,4 +129,11 @@ class Fa:
     for fid in self.idx:
       yield fid
     #return self.idx.itervalues()
-    
+  def exonSeq(self, e):
+    s = self.fetch(e.chr, start = e.start, stop = e.stop)
+    if e.strand == '-': s = rc(s)
+    return s
+  def transSeq(self, trans):
+    s = ''
+    for e in trans.exons: s += self.exonSeq(e)
+    return s

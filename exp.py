@@ -1,8 +1,10 @@
 import math
-class exp(): #values for one gene/trans/probe
-  def __init__(self, id, sample, data, anno = ''): #sample and expression list
+class Exp(): #values for one gene/trans/probe
+  '''expression values for one gene/transcript
+  '''
+  def __init__(self, id, data, anno = ''): #sample and expression list
     self.id = id
-    self.sample = sample
+    #self.sample = sample
     self.data = data
     self.anno = anno
     self.value = [] #sort index
@@ -15,53 +17,25 @@ class exp(): #values for one gene/trans/probe
   def __repr__(self):
     return self.headerline() + "\n" + str(self)
   def __len__(self):
-    return len(self.sample)
+    return len(self.data)
   def __cmp__(self, other):
     c = 0
     for i in range(len(self.value)):
       c = c or cmp(self.value[i], other.value[i])
       if c != 0: break
     return c
-  def headerline(self, showanno = False, sep='\t'):# Header string, fit all bed
+  def headerline(self, showanno = False, sep='\t'):# Header string
     sep=str(sep)
     s = 'id' + sep
     if showanno : s += 'anno' + sep
     s += sep.join(map(str, self.sample))
     return s
-    
-class trans(exp):
-  def __init__(self, tid, sample, data):
-    self.id = tid
-    exp.__init__(self, tid, sample, data)
-  #def __str__(self):
-    #return self.id + '\t' + exp.__str__(self)
-  #def __repr__(self):
-    #return 'tid\t' + '\t'.join(map(str, self.sample)) + "\n" + str(self)
-  @property
-  def tid(self):
-    return self.id
-  def headerline(self,sep='\t'):# Header string, fit all bed
-    sep=str(sep)
-    return 'tid' + sep + sep.join(map(str, self.sample))
-    
-class gene(exp):
-  def __init__(self, gid, sample, data):
+  
+class Gene:
+  def __init__(self, gid):
     self.id = gid
-    exp.__init__(self, gid, sample, data)
+    #exp.__init__(self, gid, sample, data)
     self.trans = []
-  #def __str__(self): #gene only or gene & trans
-  #  #if len(self.trans) == 0:
-  #    #return self.id + '\t' + exp.__str__(self)
-  #  #else:
-  #    #s = ''
-  #    #for t in self.trans:
-  #      #s += self.id + '\t' + str(t)
-  #    #return s
-  #def __repr__(self):
-  #  if len(self.trans) == 0:
-  #    return 'gid\t' + '\t'.join(map(str, self.sample)) + "\n" + str(self)
-  #  else:
-  #    return 'gid\ttid\t' + '\t'.join(map(str, self.sample)) + "\n" + str(self)
   @property
   def gid(self):
     return self.id
@@ -75,43 +49,40 @@ class gene(exp):
       return 'gid' + sep + 'tid' + sep + sep.join(map(str, self.sample))
   
 def subarr(lst, ids = [], head = 0): # selected items in the list
-  if len(ids) == 0:
-    #l = len(lst)
-    return lst[head:]
-  a = []
-  for i in ids:
-        a.append(lst[i])
-  return a
-def gtexp_iter(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
-  if len(sample) == 0 :
-    l = expfile.next()
-    lst = l.strip('\n').split(sep)
-    sample = subarr(lst, ei, ti+1)
+  if len(ids) == 0 : return lst[head:]
+  return [lst[i] for i in ids]
+  #a = []
+  #for i in ids:
+        #a.append(lst[i])
+  #return a
+def gtexp_iter(expfile, gi = 0, ti = 1, sep = '\t', ei = [], skip = 0):
+  for i in range(skip) : l = next(expfile)
+  #if len(sample) == 0 :
+    #l = next(expfile) #.next()
+    #lst = l.strip('\n').split(sep)
+    #sample = subarr(lst, ei, ti+1)
   for l in expfile:
     lst = l.strip('\n').split(sep)
     n = len(lst)
     gid = lst[gi]
     tid = lst[ti]
-    data = map(float, subarr(lst, ei, ti+1))
-    t = trans(tid, sample, data)
+    data = list(map(float, subarr(lst, ei, ti+1)))
+    t = Exp(tid, data, anno = gid)
     t.gid = gid
     yield t
-def gtexp_load(expfile, gi = 0, ti = 1, sep = '\t', ei = [], sample = []):
+def gtexp_load(expfile, gi = 0, ti = 1, sep = '\t', ei = [], skip = 0):
   gs = {}
-  for t in gtexp_iter(expfile, gi, ti, sep, ei, sample):
+  for t in gtexp_iter(expfile, gi, ti, sep, ei, skip):
     if t.gid not in gs:
-      gs[t.gid] = gene(t.gid, t.sample, t.data)
+      gs[t.gid] = gene(t.gid)
     gs[t.gid].add_trans(t)
   return gs
 
-def exp_iter(expfile, ii = 0, dsi = -1, annoi = -1, sep = '\t', header = True, ei = [], sample = [], skip = 0, innerskip = []):
+def exp_iter(expfile, ii = 0, dsi = -1, annoi = -1, sep = '\t', ei = [], skip = 0, innerskip = []):
   if dsi < 0 : dsi = max(ii, annoi) + 1 # supposed data start id
-  i = 0
-  while i < skip: 
-    l = expfile.next()
-    i += 1
-  if header :
-    l = expfile.next()
+  for i in range(skip) : l = next(expfile) #.expfile.next()
+  if False and header :
+    l = next(expfile) #.expfile.next()
     i += 1
     lst = l.strip('\n').split(sep)
     sample = subarr(lst, ei, dsi)
@@ -123,27 +94,13 @@ def exp_iter(expfile, ii = 0, dsi = -1, annoi = -1, sep = '\t', header = True, e
     id = lst[ii]
     anno = ''
     if annoi >= 0 : anno = lst[annoi]
-    data = map(float, subarr(lst, ei, dsi))
-    e = exp(id, sample, data, anno)
-    #t.gid = gid
+    data = list(map(float, subarr(lst, ei, dsi)))
+    e = exp(id, data, anno)
     yield e
 
-def gexp_iter(expfile, gi = 0, sep = '\t', ei = [], sample = []):
-  if len(sample) == 0 :
-    l = expfile.next()
-    lst = l.strip().split(sep)
-    sample = subarr(lst, ei, gi+1)
-  for l in expfile:
-    lst = l.strip().split(sep)
-    n = len(lst)
-    #gid = lst[gi]
-    gid = lst[gi]
-    data = map(float, subarr(lst, ei, gi+1))
-    g = gene(gid, sample, data)
-    #t.gid = gid
-    yield g
-
-class profile():
+class Profile():
+  '''expression profile of a list of genes
+  '''
   def __init__(self):
     self.exps = {}
     self.ids = []
@@ -155,8 +112,8 @@ class profile():
   def __iter__(self):
     for eid in self.ids:
       yield self.exps[eid]
-  def BHcorrection(self, pid = -1, total = -1):
-    lst = self.exps.values()
+  def BHcorrection(self, pid = -1, total = -1, append = False):
+    lst = list(self.exps.values())
     n = len(lst)
     if total < 0: total = n
     for e in lst:
@@ -165,28 +122,39 @@ class profile():
     lst.sort()
     qc = 1
     for i in range(n-1, -1, -1):
-      q = float(lst[i].value[0]) * total / (i+1)
-      if q > qc : q = qc
+      if lst[i].value[0] is None : q = None
+      else : 
+        q = float(lst[i].value[0]) * total / (i+1)
+        if q > qc : q = qc
       lst[i].q = q
+      if append : lst[i].data.append(q)
       qc = q
     return lst
-  def write(self, outfile, header = True, showanno = False, sep = '\t'):
+  def write(self, outfile, showanno = False, sep = '\t'):
     for eid in self.ids:
       outfile.write(self.exps[eid].string(showanno, sep) + '\n')
-      showanno = False
+      #showanno = False
   def TMM(self, i1 = 0, i2 = 1, mtrim = 0.3, atrim = 0.05): # The Trimmed Mean of M-values by edgeR, return log2 scale factor
-    exps = self.exps.values()
+    exps = list(self.exps.values())
     n = len(exps)
     nmt = int(mtrim * n) + 1 # m trim 0.3
     nat = int(atrim * n) + 1 # a trim 0.1
+    N1, N2 = 0, 0
+    #s = 0
     for e in exps:
       e.M = math.log(1.0 * e.data[i1] / e.data[i2], 2)
       e.A = 0.5 * math.log(e.data[i1] * e.data[i2], 2)
-      e.V = 1.0 / e.data[i1] + 1.0 / e.data[i2]
+      #e.V = 1.0 / e.data[i1] + 1.0 / e.data[i2]
+      #s += e.M
+      N1 += e.data[i1]
+      N2 += e.data[i2]
       #e.data += [m, a, v]
       e.select = True
       e.value[0:1] = [e.M] ### sort1 = m
+    #s /= len(exps)
+    #print('mean of M: {}'.format(s))
     exps.sort()
+    #print('median of M: {}'.format(exps[int(len(exps))/2].M))
     for i in range(nmt): exps[i].select = False
     for i in range(n-nmt, n) : exps[i].select = False
   
@@ -198,43 +166,47 @@ class profile():
     s = w = 0
     for e in exps:
       if not e.select : continue
+      e.V = 1.0 / e.data[i1] + 1.0 / e.data[i2] - 1.0 / N1 - 1.0 / N2 # weight
       s += e.M / e.V
       w += 1 / e.V
     f = s / w
     #print f, s, w, n
     return f
 
-class readdict(dict):
+class ReadDict(dict):
+  '''dict for read counts
+  read count -> times of the count appear
+  '''
   def __init__(self, d = {}):
     dict.__init__(self)
-    for i in d:
-      self[i] = d[i]
+    for i in d: self[i] = d[i]
   def sum(self):
     s = 0
-    for i in self:
-      s += i * self[i]
+    for i in self: s += i * self[i]
     return s
   def size(self):
-    s = 0 
-    for i in self:
-      s += self[i]
-    return s
-  def value(self, n):
+    #s = 0 
+    #for i in self: s += self[i]
+    return sum(self.values())
+  def value(self, n, default = 0):
+    '''allow non-exist keys
+    '''
     if n in self : return self[n]
-    else : return 0
+    else : return default
   def mean(self):
     return 1.0 * self.sum() / self.size()
   def quantile(self, r = 0.5):
     size = self.size()
     size *= r
-    ks = self.keys()
-    ks.sort()
+    #ks = list(self.keys())
+    #ks.sort()
+    ks = sorted(self)
     maxi = len(ks) - 1
-    for i, n in enumerate(ks):
-      if i == maxi : return n
-      size -= self[n]
-      if size < 0 : return n
-      elif size == 0 : return (n + ks[i+1])/2
+    for i, k in enumerate(ks):
+      if i == maxi : return k
+      size -= self[k]
+      if size < 0 : return k
+      elif size == 0 : return (k + ks[i+1])/2.0
     return ks[-1]
   def geomean(self, add = 1):
     s = 0
@@ -250,8 +222,7 @@ class readdict(dict):
   def merge(self, other):
     for read in other : self.record(read, other[read])
   def string(self):
-    ks = self.keys()
-    ks.sort()
+    ks = sorted(self)
     s = '{'
     for k in ks:
       s += "%d:%d, " % (k, self[k])

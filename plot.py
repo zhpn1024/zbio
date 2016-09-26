@@ -2,79 +2,56 @@ import matplotlib
 matplotlib.use('pdf')
 from matplotlib.pylab import *
 
-def plottrans(t, ypos, intv, r = [0.1, 0.3], color = 'blue',rid = -0.5):
+def plotTrans(t, ypos = 0, intv = None, r = [0.1, 0.3], color = 'blue',rid = -0.5):
+  '''plot transcript
+  '''
   plot([t.start,t.stop],[ypos,ypos],color=color)
-
-  x = []
-  y = []
-  for i in range(t.start+intv/2, t.stop-intv/3, intv):
+  # arrows
+  x, y = [], []
+  if intv is None : intv = len(t) / 20
+  for i in range(t.start+intv//2, t.stop-intv//3, intv):
     x.append(i)
     y.append(ypos)
   arr = '>'
   if t.is_reverse() : arr = "<"
   plot(x,y,'w'+arr)
-  #plot(x,y,'w',marker = arr)
+  # blocks
   x = [[],[]]
   y = [[],[]]
-  cds = 0
-  exons = t.exons[:]
-  exons.sort()
-  ts1 = t.thick_start
-  ts2 = t.thick_stop
-  orf = t(start = ts1, stop = ts2)
-  #print ts1,ts2
-  for e in exons:
-    for es in e-orf : 
+  orf = t(start = t.thick_start, stop = t.thick_stop)
+  for e in t.exons:
+    for es in e - orf : # UTR 
       x[0].append(es.start)
       y[0].append(len(es))
-    for ei in e.intersect(orf):
+    for ei in e.intersect(orf): # CDS
       x[1].append(ei.start)
       y[1].append(len(ei))
-    #if e.start < ts1 < e.stop :
-      #x[0].append(e.start)
-      #y[0].append(ts1-e.start)
-      #if e.start < ts2 < e.stop :
-        #x[1].append(ts1)
-        #y[1].append(ts2-ts1)
-        #x[0].append(ts2)
-        #y[0].append(e.stop-ts2)
-      #else :
-        #x[1].append(ts1)
-        #y[1].append(e.stop-ts1)
-        #cds = 1
-    #elif e.start < ts2 < e.stop :
-      #x[1].append(e.start)
-      #y[1].append(ts2-e.start)
-      #x[0].append(ts2)
-      #y[0].append(e.stop-ts2)
-      #cds = 0
-    #else :
-      #x[cds].append(e.start)
-      #y[cds].append(e.stop-e.start)
-  #x.append(e.start)
-  #y.append(len(e))
   bar(x[0],[r[0]*2]*len(x[0]),width=y[0],bottom=ypos-r[0],edgecolor=color,color=color)
   bar(x[1],[r[1]*2]*len(x[1]),width=y[1],bottom=ypos-r[1],edgecolor=color,color=color)
-  text((t.start+t.stop)/2,ypos+rid,t.id)
-  #print x[1],y[1]
+  text((t.start+t.stop)//2, ypos+rid, t.id)
 
-def save(file):
-  savefig(file)
+def save(filename):
+  savefig(filename)
 
-def riboshow(ax, trans, cnts, start = 0, stop = -1, ymax = -1, scale = 1, col = ['r','g','b'], title = '', showlegend = False, showframe = True, bottom = 0.8, height = 0.1):
+def riboShow(ax, trans, cnts, start = 0, stop = -1, ymax = -1, scale = 1, col = ['r','g','b'], title = '', showlegend = False, showframe = True, bottom = 0.8, height = 0.1):
+  '''plot riboseq profile
+  '''
   if stop < start : stop = trans.cdna_length()
   rlen = stop - start
   lx = [[], [], []]
   ly = [[], [], []]
+  m = 1
   for j in range(rlen):
     p = j + start
     if cnts[j + start] > 0 : 
       i = p % 3
       lx[i].append(j)
-      ly[i].append(cnts[p] * scale)
-  if ymax < 0 : ylab = 'RPF Count'
-  else : ylab = 'Normalized RPF count'
-  if ymax < 0 : ymax = max(cnts[start:stop])
+      y = cnts[p] * scale
+      ly[i].append(y)
+      if m < y : m = y
+  ylab = 'RPF Count'
+  if scale < 1 : ylab = 'Scaled RPF count'
+  if ymax < 0 : ymax = m
   for i in range(3):
     ax.bar(lx[i],ly[i],color=col[i],width=1,edgecolor=col[i],log=False,alpha=0.4, label='Frame '+str(i+1))
   
@@ -117,31 +94,38 @@ def riboshow(ax, trans, cnts, start = 0, stop = -1, ymax = -1, scale = 1, col = 
     try : ax.legend(loc='best', frameon=False)
     except : pass
   
-def orfshow(ax, orfs, start = 0, stop = -1, col = ['r','g','b'], cds = [None, None], title = 'Candidate ORFs'):
+def orfShow(ax, orfs, start = 0, stop = -1, col = ['r','g','b'], cds = [None, None], title = 'Candidate ORFs', alt = True):
+  '''plot possible ORFs
+  '''
   if stop < start : stop = trans.cdna_length()
   rlen = stop - start
+  # ORF in 3 frames
   lx = [[],[],[]]
   ly = [[],[],[]]
+  orf_s = []
   for o in orfs:
-    if o.stop <= start or o.start >= stop : continue
-    lx[o.frame-1].append(o.start - start)
-    ly[o.frame-1].append(o.stop-o.start)
+    if not alt and len(o.starts) == 0 : continue
+    if 0 <= o.stop <= start or o.start(alt=alt) >= stop : continue
+    orf_s.append(o)
+    lx[o.frame-1].append(o.start(alt=alt) - start)
+    if o.has_stop(): ly[o.frame-1].append(o.stop-o.start(alt=alt))
+    else : ly[o.frame-1].append(rlen)
   for i in range(3):
     ax.bar(lx[i],[0.2]*len(lx[i]),color=col[i],bottom=2-i+0.4,width=ly[i],alpha=0.3,linewidth=0)
+  # annotated ORF
   if cds[0] is not None and not (cds[0]>stop or cds[1]< start): 
     i = cds[0] % 3
     newcds = [c - start for c in cds]
-    #ax.plot(atis-start, 2-i+1, col[i]+'v', alpha=0.7, markersize=12)
     ax.text(max(newcds[0],0), 2-i+0.8, 'Annotated ORF', color=col[i])
-    #ax.plot(newcds,[2-i+0.8,2-i+0.8],lw = 2,color=col[i],alpha=0.6)
     ax.bar(newcds[0],[0.4],color=col[i],bottom=2-i+0.3,width=cds[1]-cds[0],alpha=0.3, edgecolor=col[i], linewidth=2)
+  # start & stop codons
   lx = [[],[],[]]
   ly = [[],[],[]]
   lz = [[],[],[]]
-  for orf in orfs:
-    lx[orf.frame-1] += [s - start for s in orf.starts]
-    ly[orf.frame-1] += [s - start for s in orf.altstarts]#orf.altstarts
-    lz[orf.frame-1] += [orf.stop- 3 - start]
+  for o in orf_s:
+    lx[o.frame-1] += [s - start for s in o.starts]
+    if alt : ly[o.frame-1] += [s - start for s in o.altstarts]#orf.altstarts
+    if o.has_stop() : lz[o.frame-1] += [o.stop- 3 - start]
   for i in range(3):
     ax.bar(ly[i], [0.4]*len(ly[i]), color='yellow', bottom=2-i+0.3, width=3, alpha=0.5, edgecolor='yellow')
     ax.bar(lx[i], [0.4]*len(lx[i]), color='lime', bottom=2-i+0.3, width=3, alpha=0.5, edgecolor='lime')

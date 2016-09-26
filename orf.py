@@ -1,25 +1,27 @@
-from zbio import tools
+from zbio import fa
 
 codonSize = 3
 cstart = ['ATG']
 cstartlike = ['TTG', 'CTG', 'GTG', 'AAG', 'AGG', 'ACG', 'ATT', 'ATA', 'ATC'] #AAG & AGG may be removed
-caltstart = cstartlike
+#caltstart = cstartlike
 cstop = ['TGA', 'TAA', 'TAG']
 
-senseframe = [1, 2, 3]
-antiframe = [-1, -2, -3]
-frame = [1, 2, 3, -1, -2, -3]
+senseframes = [1, 2, 3]
+antiframes = [-1, -2, -3]
+frames = [1, 2, 3, -1, -2, -3]
 
-class orf:
+class Orf:
+  '''multiple start with same stop (in the same ORF)
+  '''
   def __init__(self, lst = [], frame = 0, stop = -1):
     if len(lst) != 0:
       #lst = l.strip().split('\t')
       self.frame = int(lst[0])
       if '' == lst[1] : 
         self.starts = []
-      else : self.starts = map(int, lst[1].split(','))
+      else : self.starts = list(map(int, lst[1].split(',')))
       if lst[2] == '' : self.altstarts = []
-      else : self.altstarts = map(int, lst[2].split(','))
+      else : self.altstarts = list(map(int, lst[2].split(',')))
       self.stop = int(lst[3])
     else:
       self.frame = frame
@@ -29,21 +31,21 @@ class orf:
   def __str__(self):
     return "%d\t%s\t%s\t%d" % (self.frame, ','.join(map(str, self.starts)), ','.join(map(str, self.altstarts)), self.stop)
   def __repr__(self):
-    return "orf object: " + str(self)
+    return "Orf object: " + str(self)
   def has_start(self):
     return len(self.starts) + len(self.altstarts) > 0
   def has_stop(self):
     return self.stop >= 0
   def __len__(self):
     if not self.is_complete() : return 0
-    #if self.stop < self.start() : print str(self)
     return self.stop - self.start()
   def __cmp__(self, other):
     return cmp(len(self), len(other)) or cmp(self.start(),other.start)
   def length(self):
     return len(self)
   def aa_len(self):
-    return len(self) / codonSize
+    if len(self) == 0 : return 0
+    return len(self) // codonSize - 1
   #@property
   def start(self, alt = True):
     if alt : return min(self.starts + self.altstarts)
@@ -76,7 +78,7 @@ class orf:
   def filtByLen(self, minaalen, tail = -1):
     stop = self.stop - 3
     if stop < 0 : stop = tail
-    if stop < 0 : return
+    #if stop < 0 : return
     th = minaalen * 3
     rm = False
     for i, s in enumerate(self.starts):
@@ -91,48 +93,48 @@ class orf:
         break
     if rm : self.altstarts[i:] = []
 
-def allorf(seq, strand = '+', minaalen = 0) :
+def allorf(seq, strand = '+', minaalen = 0, tail = -1) :
+  '''find all possible ORFs in the sequence
+  '''
   seq = seq.upper().replace('U','T')
-  if strand == '+' : fr = senseframe
+  if strand == '+' : fr = senseframes
   elif strand == '-' : 
-    fr = antiframe
-    antiseq = tools.rc(seq)
+    fr = antiframes
+    antiseq = fa.rc(seq)
   else: 
-    fr = frame
-    antiseq = tools.rc(seq)
+    fr = frames
+    antiseq = fa.rc(seq)
   
   length = len(seq)
   for f in fr:
-    if f > 0:
-      s = seq
-      fa = f
-    else: 
-      s = antiseq
-      fa = -f
-    o = orf(frame = f)
+    if f > 0: s = seq
+      #fa = f
+    else: s = antiseq
+    fa = abs(f)
+    o = Orf(frame = f)
     for i in range(fa-1, length, codonSize):
       try: codon = s[i:i+codonSize]
       except: break
-      if codon in cstart:
-        o.starts.append(i)
-      elif codon in cstartlike:
-         o.altstarts.append(i)
+      if codon in cstart: o.starts.append(i)
+      elif codon in cstartlike: o.altstarts.append(i)
       elif codon in cstop:
         o.stop = i + codonSize
-        o.filtByLen(minaalen = minaalen, tail = length)
+        o.filtByLen(minaalen = minaalen, tail = tail)
         if o.has_start():
           yield o
-        o = orf(frame = f)
-    o.filtByLen(minaalen = minaalen, tail = length)
+        o = Orf(frame = f)
+    o.filtByLen(minaalen = minaalen, tail = tail)
     if o.has_start() : yield o
-def orflist(seq, strand = '+', sort = True, minaalen = 0):
-  ol = []
-  for o in allorf(seq, strand = strand, minaalen = minaalen):
-    ol.append(o)
+def orflist(seq, strand = '+', sort = True, minaalen = 0, tail = -1):
+  ol = list(allorf(seq, strand = strand, minaalen = minaalen, tail = tail))
+  #for o in allorf(seq, strand = strand, minaalen = minaalen, tail = tail):
+    #ol.append(o)
   if sort : ol.sort(reverse = True)
   return ol
 
-class fixedorf():
+class FixedOrf():
+  '''only one start and one stop
+  '''
   def __init__(self, start, stop):
     self.start = start
     self.stop = stop
@@ -142,7 +144,7 @@ class fixedorf():
     return len(self)
   def __repr__(self):
     return "Fixed ORF object: %d - %d" % (self.start, self.stop)
-  def frame(self):
+  def frame(self): # 0 based
     return self.start % 3
   def __cmp__(self, other):
     return cmp(self.start, other.start) or cmp(self.stop, other.stop)
@@ -157,64 +159,20 @@ def orf_by_pos(seq, pos): ### Unkown start codon, only to find stop codon
       break
   o = fixedorf(start = pos, stop = i)
   return o
-
-def orfs_by_pos0(seq, pos): 
-  orfs = []
-  for f in range(codonSize):
-    for i in range(pos+f, length, codonSize):
-      try: codon = s[i:i+codonSize]
-      except: break
-      if codon in cstop: 
-        orfs.append(pos+f, i+codonSize)
-        break
-    if len(orfs) <= f : orfs.append(pos+f, i)
-  return orfs
-def findorf(seq, strand = '+', altcstart = False) :
-  seq = seq.upper().replace('U','T')
-  if strand == '+' : fr = senseframe
-  elif strand == '-' : 
-    fr = antiframe
-    antiseq = Tools.rc(seq)
-  else: 
-    fr = frame
-    antiseq = Tools.rc(seq)
-  if altcstart: cs = cstart + cstartlike
-  else: cs = cstart
-  
-  length = len(seq)
-  for f in fr:
-    if f > 0:
-      s = seq
-      fa = f
-    else: 
-      s = antiseq
-      fa = -f
-    orfstart = orfstop = -1
-    for i in range(fa-1, length, codonSize):
-      try: codon = s[i:i+codonSize]
-      except: break
-      if codon in cs:
-        if orfstart < 0: orfstart = i
-      elif codon in cstop:
-        orfstop = i + codonSize ##
-        if orfstart >= 0:
-          orflen = (i - orfstart) / 3
-          if f > 0:
-            yield orfstart, orfstop, f, orflen
-          else:
-            yield length - orfstop, length - orfstart, f, orflen
-          orfstart = orfstop = -1
           
-def orfdict(orflist, alt = True):
+def orfDict(orflist, alt = True):
+  '''dict of start -> stop
+  '''
   od = {}
   for o in orflist:
-    for s in o.starts:
-      od[s] = o.stop
+    if o.stop < 0 : continue
+    for s in o.starts: od[s] = o.stop
     if alt:
-      for s in o.altstarts:
-        od[s] = o.stop
+      for s in o.altstarts: od[s] = o.stop
   return od
 def nearest_start(s, od, flank = 1):
+  '''nearest start in ORF dict from s
+  '''
   if s in od: return s
   for i in range(1, flank + 1):
     if s + i in od : return s + i ###
@@ -236,6 +194,8 @@ def translate(seq):
   return aa
 
 def is_start(seq, pos, alt = False, flank = 0):
+  '''if start / alt start codon is nearby
+  '''
   for i in range(pos - flank, pos + flank + 1):
     try : c = seq[i:i+codonSize]
     except : continue

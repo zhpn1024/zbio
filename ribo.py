@@ -1,5 +1,5 @@
 import itertools
-from zbio import stat, bam, gtf, exp, orf, tools
+from zbio import stat, bam, gtf, exp, orf, tools, io, fa
 from multiprocessing import Pool
 
 codonSize = 3
@@ -11,26 +11,21 @@ minTransLen = 50
 defOffset = 12
 #nhead, ntail = defOffset, 30 - defOffset
 nhead = ntail = 0
-bin = 3
 
 def offset(read = 30, offdict = None):
+  '''get P-site offset by read length, default: 12
+  '''
   if offdict is None : return defOffset
   if type(read) == int : length = read # compatible with old versions!
   else : length = read.cdna_length()
   if 'm0' not in offdict or not read.is_m0() : od = offdict
   else : od = offdict['m0']
   if length in od : return od[length]
-  else : return None
+  else : return None # remove this length
 
-def bin_counts(arr, bin = bin):
-  l = len(arr)
-  lb = l / bin
-  barr = [0] * lb
-  for i in range(lb):
-    p = i * bin
-    barr[i] = sum(arr[p:(p+bin)])
-  return barr
-def rstest_mw(x, y): # rank sum test p value of x > y
+def rstest_mw(x, y): 
+  '''rank sum test p value of x > y, Not used because of some bug in mannwhitneyu
+  '''
   from scipy.stats import ranksums, mannwhitneyu
   #n1, n2 = len(x), len(y)
   #mu = n1 * n2 / 2.
@@ -39,46 +34,34 @@ def rstest_mw(x, y): # rank sum test p value of x > y
   except : return 0.5
   if st1 > 0 : return p
   else: return 1 - p ###
-def rstest(x, y, delta = 1e-4, show = False): # Exact rank sum test for intergers with ties
+def rstest(x, y, delta = 1e-4, show = False): 
+  '''Exact rank sum test for intergers with ties
+  '''
   rs =  stat.rankSumTiesExact(x, y, show = show)
   p = rs.test(delta=delta)
   return p
-class Ribo: #ribo seq profile in transcript
+class Ribo: 
+  '''riboseq profile for a transcript
+  '''
   def __init__(self, trans, ribobam = None, offset = offset, offdict = None, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary, compatible = True, mis = 2, downsample = 1.0, seed = 1):
     self.length = trans.cdna_length()
     self.cnts = [0] * self.length
-    self.nhead = nhead
-    self.ntail = ntail
-    self.bin = bin
+    self.nhead, self.ntail = nhead, ntail
     self.total = 0
     self.trans = trans
     if ribobam is None : return
     if downsample < 1 : 
       import random
       random.seed(seed)
-    for r in ribobam.fetch_reads(trans.chr, trans.start, trans.stop):
-      if not secondary and r.is_secondary : continue
-      if r.read.mapping_quality < minMapQ : continue
-      if r.strand != trans.strand : continue ## Only the same strand?
-      try: 
-        if r.read.get_tag('NH') > maxNH : continue
-      except: pass
-      if compatible : 
-        c = r.is_compatible(trans, mis = mis)
-      #else: c = r.is_inside(trans, mis = mis)
-        if not c : continue ## 
-      if downsample < 1 and random.random() >= downsample : continue ## downsample
+    for r in bam.transReadsIter(ribobam, trans, compatible = compatible, mis = mis, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary) : #ribobam.fetch_reads(trans.chr, trans.start, trans.stop):
       l = r.cdna_length()
-      #if l not in offset: continue
       off = offset(r, offdict)
       if off is None: continue
       i = trans.cdna_pos(r.genome_pos(off)) ## Default bias
-      if i is None : continue
-      #if i not in self.cnts: self.cnts[i] = 0
-      if i >= len(self.cnts) : continue
+      if i is None or i >= len(self.cnts) : continue
+      if downsample < 1 and random.random() >= downsample : continue ## downsample
       self.cnts[i] += 1
-      self.total += 1
-    #if total == 0 : continue
+    self.total = sum(self.cnts)
   def cnts_enum(self, start = nhead, stop = None):
     if stop is None : stop = self.length - self.ntail
     for i in range(start, stop):
@@ -89,7 +72,9 @@ class Ribo: #ribo seq profile in transcript
     self.total += other.total
     return self.total
   def abdscore(self, start = None, stop = None, norm = 1000):
-    if start is None and stop is None : total, length = self.total, self.length - 30
+    '''abundant score, log reads per kilo nt
+    '''
+    if start is None and stop is None : total, length = self.total, self.length
     else :
       if start is None : start = nhead
       if stop is None : stop = self.length - ntail
@@ -99,15 +84,39 @@ class Ribo: #ribo seq profile in transcript
     if length <= 0 : return None
     import math
     return math.log(float(total) / length * norm)
-  def enrich_test(self, start, stop): # Do not use
-    inarr = self.cnts[start:stop]
-    outarr = self.cnts[self.nhead:start] + self.cnts[stop:self.length-self.ntail]
+  def frame_test(self, start, stop, delta=1e-4, glm = False): 
+    '''basic frame test of in frame reads higher than out frame reads in the ORF
+    start and stop should be in frame
+    '''
+    l = (stop - start) // 3
+    inarr = [0] * l
+    outarr = 2 * l * [0]
+    for i in range(l):
+      p = start + i * 3
+      inarr[i] = self.cnts[p]
+      outarr[i*2] = self.cnts[p + 1]
+      outarr[i*2 + 1] = self.cnts[p + 2]
+    if len(inarr) <= 0 or len(outarr) <= 0 : return 1
+    if max(inarr) == 0 : return 1
+    if glm : return stat.glmNBTest(inarr, outarr)
+    return rstest(inarr, outarr, delta = delta)
+  def enrich_test(self, start, stop, ts1 = None, ts2 = None, inframe = True, delta=1e-4, glm = False): 
+    '''basic enrich test of start~stop reads higher than other reads in ts1~ts2
+    if inframe, only test reads that in the ORF frame, and start, stop should be in frame
+    '''
+    if ts1 is None : ts1 = self.nhead
+    if ts2 is None : ts2 = self.length-self.ntail
+    if inframe : step = 3
+    else : step = 1
+    inarr = self.cnts[start:stop:step]
+    outarr = self.cnts[start-step:ts1-1:-step] + self.cnts[stop:ts2:step]
     if len(outarr) <= 0: return None
-    inbc = bin_counts(inarr)
-    outbc = bin_counts(outarr)
-    p = rstest(inbc, outbc)
-    return p
-  def frame_test_region(self, region, frame, show = False, old = False, delta=1e-4, glm = False): # Frame test in a region
+    if max(inarr) == 0 : return 1
+    if glm : return stat.glmNBTest(inarr, outarr)
+    return rstest(inarr, outarr, delta = delta)
+  def frame_test_region(self, region, frame, show = False, old = False, delta=1e-4, glm = False): 
+    '''Frame test in a region
+    '''
     inarr, outarr = [], []
     for i in region.num_iter():
       i = int(i)
@@ -118,10 +127,10 @@ class Ribo: #ribo seq profile in transcript
     if max(inarr) == 0 : return 1 ## 
     if old : return rstest_mw(inarr, outarr)
     elif glm : return stat.glmNBTest(inarr, outarr)
-    #rs =  stat.rankSumTiesExact(inarr, outarr)
-    #p = rs.fastTest(show=show, delta=delta)#p = stat.rsTestWithTies(inarr, outarr, show = show) # rstest(inarr, outarr)
     return rstest(inarr, outarr, delta = delta, show = show)
-  def enrich_test_region(self, r1, r2, frame, glm = False): # Enrich test between regions
+  def enrich_test_region(self, r1, r2, frame, glm = False): 
+    '''Enrich test between regions
+    '''
     inarr, outarr = [], []
     for i in r1.num_iter():
       i = int(i)
@@ -134,24 +143,15 @@ class Ribo: #ribo seq profile in transcript
     if glm : return stat.glmNBTest(inarr, outarr)
     p = rstest(inarr, outarr)
     return p
-  def frame_test(self, start, stop): # old frame test, to be replaced
-    l = (stop - start) / bin
-    inarr = [0] * l
-    outarr = [0] * 2 * l
-    for i in range(l):
-      p = start + i * bin
-      inarr[i] = self.cnts[p]
-      outarr[i*2] = self.cnts[p + 1]
-      outarr[i*2 + 1] = self.cnts[p + 2]
-    if len(inarr) <= 0 or len(outarr) <= 0 : return 1
-    p = rstest(inarr, outarr)
-    return p
-  def multi_orf_test(self, orflist, glm = False): # Main function of multiple ORF detection for riboseq data
+  
+  def multi_orf_test(self, orflist, glm = False): 
+    '''multiple ORF detection for riboseq data, not used in final version
+    '''
     import interval
     tid = self.trans.id
     blank = []
     for i in range(codonSize): ## Blank regions in different frames
-      b = interval.interval(start=self.nhead, stop=self.length-self.ntail, id=tid)
+      b = interval.Interval(start=self.nhead, stop=self.length-self.ntail, id=tid)
       blank.append(b)
     eps, fps = [1] * len(orflist), [1] * len(orflist)
     #indeps = [None] * len(orflist)
@@ -183,7 +183,7 @@ class Ribo: #ribo seq profile in transcript
         except : o.next = None
         #if o.next is None : stop = o.stop
         #else : stop = o.next.start  ## Inside group regions
-        o.region = interval.interval(start = o.start, stop = o.stop)
+        o.region = interval.Interval(start = o.start, stop = o.stop)
         o.indr = indep_region(o, blank)
     blankall = blank[0]
     for i in range(1, codonSize):
@@ -217,12 +217,14 @@ class Ribo: #ribo seq profile in transcript
         op = op.prev
     '''
     return ep, fp
-  def max_orf(self, orf, blank): # for ribonly_orf_finder
+  def max_orf(self, orf, blank): 
+    '''for ribonly_orf_finder
+    '''
     import interval
     indr = indep_region(orf, blank)
     mst, mp = None, 1
     for st in orf.sts :
-      r = interval.interval(start=st, stop=orf.st)
+      r = interval.Interval(start=st, stop=orf.st)
       r = r.intersect(indr)
       if r.rlen() < minRlen : continue
       fp = self.frame_test_region(r, orf.frame)
@@ -230,10 +232,13 @@ class Ribo: #ribo seq profile in transcript
     return mst, mp
 
   def ribonly_orf_finder(self, orflist, alt = False, fpth = 0.05):
+    '''find likely TIS by only riboseq data, not used, similar function in pvalStatus()
+    However, this function seems better
+    '''
     import interval
     blank = []
     for i in range(codonSize): ## Blank regions in different frames
-      b = interval.interval(start=self.nhead, stop=self.length-self.ntail)
+      b = interval.Interval(start=self.nhead, stop=self.length-self.ntail)
       blank.append(b)
     os = []
     for o in orflist : # Initialize
@@ -243,19 +248,19 @@ class Ribo: #ribo seq profile in transcript
       if len(o.sts) == 0 : continue
       o.sts.sort()
       if max(self.cnts[o.sts[0]:o.stop]) == 0 : continue
-      o.region = interval.interval(start = o.sts[0], stop = o.stop)
+      o.region = interval.Interval(start = o.sts[0], stop = o.stop)
       o.frame = o.stop % 3
       o.fps = {}
       os.append(o)
     findnew = True
-    lastaff = interval.interval(start=self.nhead, stop=self.length-self.ntail)
+    lastaff = interval.Interval(start=self.nhead, stop=self.length-self.ntail)
     while findnew : # Search ORF
       findnew = False
-      affected = interval.interval()
+      affected = interval.Interval()
       for o in os : 
         if len(o.sts) == 0 : continue
         if max(self.cnts[o.sts[0]:o.st]) == 0 : continue
-        if lastaff.intersect(interval.interval(o.sts[0], o.st)).rlen() == 0 : continue # Not affected
+        if lastaff.intersect(interval.Interval(o.sts[0], o.st)).rlen() == 0 : continue # Not affected
         lastst = o.st
         st, p = self.max_orf(o, blank)
         while p < fpth : # Max ORF length
@@ -272,7 +277,7 @@ class Ribo: #ribo seq profile in transcript
     results = []
     for o in orflist : # Summarize
       if o.st >= o.stop : continue
-      o.region = interval.interval(start=o.st, stop=o.stop)
+      o.region = interval.Interval(start=o.st, stop=o.stop)
       region = indep_region(o, blank)
       if region.rlen() < minRlen : region = o.region
       o.fp = min(o.fps.values()) ## min pvalue
@@ -280,11 +285,15 @@ class Ribo: #ribo seq profile in transcript
       results.append(o)
     return results
   def tis_test(self, start, r, p, is_zt = False):
-    if is_zt : nb = stat.ztnb(r, p)
-    else : nb = stat.negbinom(r, p)
+    '''negative binomial test for TIS site
+    '''
+    if is_zt : nb = stat.ZTNB(r, p)
+    else : nb = stat.NegBinom(r, p)
     p = nb.pvalue(self.cnts[start])
     return p
   def is_summit(self, p, flank = 3):
+    '''if the count is local max count. not used
+    '''
     if p < nhead or p >= self.length - ntail: return False
     if self.cnts[p] == 0: return False
     for i in range(1, flank + 1):
@@ -292,12 +301,16 @@ class Ribo: #ribo seq profile in transcript
       if p - i >= 0 and self.cnts[p] < self.cnts[p - i]: return False
     return True
   def cnts_dict(self):
-    cd = exp.readdict() #{}
+    '''only non-sero sites, not used
+    '''
+    cd = {}
     for i in range(nhead, len(self.cnts) - ntail):
-      if self.cnts[i] > 0 : cd[i] = self.cnts[i]
+      if self.cnts[i] > 0 : cd[i] = self.cnts[i] 
     return cd
 
-  def top_summits_iter(self, start = None, stop = None, minratio = 0, flank = 3, is_zt = False, pth = 0.05, harr = False): #generate all possible sites, do not specify total number  r, p,
+  def top_summits_iter(self, start = None, stop = None, minratio = 0, flank = 3, is_zt = False, pth = 0.05, harr = False): 
+    '''generate all possible sites, do not specify total number or test with r, p, not used in final version
+    '''
     slist = []
     if start is None : start = nhead
     if stop is None : stop = self.length - ntail
@@ -314,6 +327,8 @@ class Ribo: #ribo seq profile in transcript
       #if self.tis_test(i, paras[ip][0], paras[ip][1]) :pass
     #if p < pth:
   def harrTest(self, start, stop, r, p, is_zt = False, harrwidth = 15):
+    '''for Harritonine data, not used
+    '''
     stop1 = start + harrwidth * 3
     if stop1 > stop : stop1 = stop
     ps = []
@@ -324,13 +339,15 @@ class Ribo: #ribo seq profile in transcript
 
 #### For multiple ORF detection
 def indep_region(orf, blank):
+  ''' independent region for different overlapping ORFs, not used
+  '''
   of = orf.frame
   r = orf.region
   for i in range(codonSize):
     if i != of : r = r.intersect(blank[i])
   return r
 
-#### For tis
+#### For TIS background estimation
 def sl_idx(value, lst, parts): # group by number of genes
   l = len(lst) - 1
   for i in range(len(parts)):
@@ -343,19 +360,14 @@ def pidx(value, lst):
   for i, s in enumerate(lst):
     if s >= value : break
   return i
-def _merge_cnts(args):
+def _merge_cnts(args): # for estimate_tis_bg_all
   g, bampath, offdict = args
-  bamfile = bam.bamfile(bampath, "rb")
+  bamfile = bam.Bamfile(bampath, "rb")
   merge = g.merge_trans()
   ml = merge.cdna_length()
   if ml < minTransLen : return None ##
   mtis = Ribo(merge, bamfile, offdict = offdict, compatible = False)
   if mtis.total == 0 : return None
-  #print g.chr, g.id, mtis.total
-  #mcds2 = []
-  #for t in g.trans:
-    #cds2 = merge.cdna_pos(t.cds_stop(cdna = False))
-    #if cds2 is not None : mcds2.append(cds2)
   score = mtis.abdscore()
   return merge, score, mtis.cnts_dict() #, mcds2
 
@@ -370,16 +382,16 @@ def _est_ztnb(args):
   return zt.r, zt.p
 
 def estimate_tis_bg_all(gtfpath, bampath, genomefapath, parts = [0.25, 0.5, 0.75], offdict = None, whole = True, maxqt = 0.95, skip_tis = True, alt_tis = False, tis_flank = 1, addchr = False, numProc = 1, verbose = False):
+  '''estimate TIS background using counts from all regions of the transcript. not used
+  '''
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
-  #bamfile = bam.bamfile(bampath, "rb")
   gtffile = open(gtfpath, 'r')
-  from zbio import fa
   genome = fa.Fa(genomefapath)
   fulldata, genes, sl = {}, [], []
-  data = [exp.readdict() for i in range(len(parts))]
+  data = [exp.ReadDict() for i in range(len(parts))]
   
-  gene_iter = gtf.gtfgene_iter(gtffile, addchr = addchr, chrs = genome.idx, verbose = verbose)
+  gene_iter = gtf.gtfGene_iter(gtffile, addchr = addchr, chrs = genome.idx, verbose = verbose)
   para_iter = itertools.izip(gene_iter, itertools.repeat(bampath), itertools.repeat(offdict))
   if numProc <= 1 : merge_iter = itertools.imap(_merge_cnts, para_iter)
   else : 
@@ -392,13 +404,12 @@ def estimate_tis_bg_all(gtfpath, bampath, genomefapath, parts = [0.25, 0.5, 0.75
     sl.append(score)
     fulldata[merge.gid] = cnts_dict, score #, mcds1, mcds2
     genes.append(merge)
-    #print g.id, fulldata[g.id]
   sl.sort()
-  print 'Group data...'
+  if verbose : print('Group data...')
   s, ip = 0, 0
   for score, t in sl:
     s += t
-    if s >= total * parts[ip] : 
+    if s >= total * parts[ip] : # group by number of genes
       slp[ip] = score
       ip += 1
   if ip < len(parts) : slp[ip] = score
@@ -411,34 +422,36 @@ def estimate_tis_bg_all(gtfpath, bampath, genomefapath, parts = [0.25, 0.5, 0.75
     ml = m.cdna_length()
     msq = tools.gtf2seq(genome, m)
     for i in range(start, ml - ntail):
-      #if i not in cnts: continue # ignore 0s
       if skip_tis and orf.is_start(msq, i, alt = alt_tis, flank = tis_flank) : continue # i in mcds1: continue
       if i not in cnts: data[ip].record(0)
       else : data[ip].record(cnts[i])
       
-  print 'Estimate ZTNB parameters...'
+  if verbose : print ('Estimate ZTNB parameters...')
   paras = []
   slp = [pidx_uplim(i, sl, parts) for i in range(len(parts))]
-  print len(sl), slp
-  if numProc <= 1 : paras = map(_est_ztnb, [(da, maxqt) for da in data])
+  if verbose : print (len(sl), slp)
+  if numProc <= 1 : paras = list(map(_est_ztnb, [(da, maxqt) for da in data]))
   else : 
-    paras = pool.map(_est_ztnb, [(da, maxqt) for da in data])
+    paras = list(pool.map(_est_ztnb, [(da, maxqt) for da in data]))
     pool.close()
-  #sl = genes = fulldata = '' # release memory?
   return paras, slp, data
 
-def multiRibo(trans, bampaths, offdict = None, compatible = True, mis = 2): # Load multiple ribobam files to one object
+def multiRibo(trans, bampaths, offdict = None, compatible = True, mis = 2): 
+  '''Load multiple ribobam files to one object
+  '''
   if type(bampaths) == list : 
-    bamfiles = [bam.bamfile(bp, "rb") for bp in bampaths]
+    bamfiles = [bam.Bamfile(bp, "rb") for bp in bampaths]
     if offdict is None : offdict = [None] * len(bampaths)
   else : 
-    bamfiles = [bam.bamfile(bampaths, "rb")]
+    bamfiles = [bam.Bamfile(bampaths, "rb")]
     offdict = [offdict]
-  mribo = Ribo(trans) # Empty object, bamfiles[0], offdict = offdict[0], compatible = compatible, mis = mis)
+  mribo = Ribo(trans) # Empty object
   for i in range(len(bamfiles)) :
     mribo.merge(Ribo(trans, bamfiles[i], offdict = offdict[i], compatible = compatible, mis = mis))
   return mribo
-def select(g): # select trans for TIS background estimation
+def select(g): 
+  '''select trans for TIS background estimation, replaced in gtf and bed
+  '''
   maxlen, mt = 0, None
   if g.genetype == 'protein_coding' : 
     for t in g.trans:
@@ -447,14 +460,12 @@ def select(g): # select trans for TIS background estimation
       except : continue
       if cdslen % 3 != 0 : continue
       if cdslen > maxlen : maxlen, mt = cdslen, t
-    #return mt 
-  else : 
-    return None ###
-    for t in g.trans:
-      l = t.cdna_length()
-      if l > maxlen : maxlen, mt = l, t
-  return mt
+    return mt 
+  else : return None ###
 def _merge_cnts_cds(args): # updated for bampath list
+  '''get TIS CDS background data for each transcript
+  gene level score and transcript level inframe counts
+  '''
   g, bampaths, offdict = args
   merge = g.merge_trans()
   ml = merge.cdna_length()
@@ -468,24 +479,24 @@ def _merge_cnts_cds(args): # updated for bampath list
   cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) - codonSize
   tis = multiRibo(t, bampaths, offdict = offdict, compatible = False)
   return t, score, mtis.total, tis.cnts[cds1:cds2:3] #, mcds2
-def _est_nb_lower(da):
-  nb = stat.negbinom()
+def _est_nb_lower(da): # not used
+  nb = stat.NegBinom()
   return nb.fit_lower(da)
 def _est_nb(da):
-  nb = stat.negbinom()
+  nb = stat.NegBinom()
   nb.estimate(da)
   return nb.r, nb.p
 
 
-def estimate_tis_bg_inframe(gtfpath, bampaths, genomefapath, parts = [0.25, 0.5, 0.75], offdict = None, skip_tis = True, alt_tis = True, addchr = False, numProc = 1, verbose = False, harrwidth = None):
+def estimate_tis_bg_inframe(genepath, bampaths, genomefapath, parts = [0.25, 0.5, 0.75], offdict = None, skip_tis = True, alt_tis = True, addchr = False, numProc = 1, verbose = False, harrwidth = None):
+  '''estimate TIS background using only ORF inframe reads, support only gtf, not used
+  '''
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
-  #bamfile = bam.bamfile(bampath, "rb")
   gtffile = open(gtfpath, 'r')
-  from zbio import fa
   genome = fa.Fa(genomefapath)
   fulldata, genes, sl = {}, [], []
-  data = [exp.readdict() for i in range(len(parts))]
+  data = [exp.ReadDict() for i in range(len(parts))]
   
   gene_iter = gtf.gtfgene_iter(gtffile, addchr = addchr, chrs = genome.idx, verbose = verbose)
   para_iter = itertools.izip(gene_iter, itertools.repeat(bampaths), itertools.repeat(offdict))
@@ -499,11 +510,90 @@ def estimate_tis_bg_inframe(gtfpath, bampaths, genomefapath, parts = [0.25, 0.5,
     t, score, total, cnts = result
     sl.append((score, total))
     ctotal += total
-    fulldata[t.gid] = cnts, score #, mcds1, mcds2
+    fulldata[t.id] = cnts, score #, mcds1, mcds2
     genes.append(t)
-    #print g.id, fulldata[g.id]
   sl.sort()
-  print 'Group data...'
+  if verbose : print ('Group data...')
+  slp = [None] * len(parts)
+  s, ip = 0, 0
+  for score, t in sl:
+    s += t
+    if s >= ctotal * parts[ip] : # group by sum of total reads
+      slp[ip] = score
+      ip += 1
+  if ip < len(parts) : slp[ip] = score
+  if verbose : print (slp)
+  for t in genes:
+    cnts, score = fulldata[t.id]
+    ip = pidx(score, slp) #ip = sl_idx(score, sl, parts)
+    start = t.cds_start(cdna = True)
+    if start is None : print (t.gid, t.id)
+    tl = t.cdna_length()
+    tsq = tools.trans2seq(genome, t)
+    for i, c in enumerate(cnts) : # range(start, tl - ntail):
+      if harrwidth is not None and i < harrwidth : continue # Only skip known harr region
+      if skip_tis and orf.is_start(tsq, start + 3*i, alt = alt_tis, flank = 0) : continue # i in mcds1: continue
+      data[ip].record(c)
+      
+  if verbose : print ('Estimate NB parameters...')
+  if numProc <= 1 : paras = list(map(_est_nb_lower, data))
+  else : 
+    paras = list(pool.map(_est_nb, data)) #[(da, maxqt) for da in data])
+    pool.close()
+  return paras, slp, data
+
+def _cdsCounts(args): # updated for bampath list
+  '''get TIS CDS in frame background data for each transcript
+  For estimateTISbg()
+  '''
+  t, args2 = args
+  bampaths, offdict, genomefapath, harrwidth, skip_tis, alt_tis = args2
+  tl = t.cdna_length()
+  if tl < minTransLen : return None
+  cds1 = t.cds_start(cdna = True)
+  if cds1 is None : return None
+  cds2 = t.cds_stop(cdna = True)
+  if cds2 is None or cds2 == cds1 : return None
+  if cds2 < cds1 or (cds2 - cds1) % 3 > 0 : 
+    print('Wrong CDS: {} {} {}'.format(t.id, cds1, cds2))
+    return None
+  tis = multiRibo(t, bampaths, offdict = offdict, compatible = False)
+  score = tis.abdscore()
+  genome = fa.Fa(genomefapath)
+  tsq = genome.transSeq(t) #tools.trans2seq(genome, t)
+  tdata = exp.ReadDict()
+  for i in range(cds1, cds2-3, 3) : # range(start, tl - ntail):
+    if harrwidth is not None and i < harrwidth * 3 : continue # Only skip known harr region
+    if skip_tis and orf.is_start(tsq, i, alt = alt_tis, flank = 0) : continue # i in mcds1: continue
+    tdata.record(tis.cnts[i])
+  return t, score, tis.total, tdata #tis.cnts[cds1:cds2-3:3] #, mcds2
+
+def estimateTISbg(genepath, bampaths, genomefapath, parts = [0.25, 0.5, 0.75], offdict = None, skip_tis = True, alt_tis = True, addchr = False, numProc = 1, verbose = False, harrwidth = None, geneformat = 'auto'):
+  '''estimate TIS background using only ORF inframe reads, corrent version
+  '''
+  parts.sort()
+  if parts[-1] < 1 : parts.append(1)
+  genome = fa.Fa(genomefapath)
+  fulldata, genes, sl = {}, [], []
+  data = [exp.ReadDict() for i in range(len(parts))]
+  
+  trans_iter = io.transSelectIter(genepath, fileType = geneformat, chrs = genome.idx, verbose = verbose)
+  args2 = bampaths, offdict, genomefapath, harrwidth, skip_tis, alt_tis
+  para_iter = itertools.izip(trans_iter, itertools.repeat(args2)) # , itertools.repeat(offdict))
+  if numProc <= 1 : merge_iter = itertools.imap(_cdsCounts, para_iter)
+  else : 
+    pool = Pool(processes = numProc - 1)
+    merge_iter = pool.imap_unordered(_cdsCounts, para_iter, chunksize = 5)
+  ctotal = 0
+  for result in merge_iter:
+    if result is None : continue
+    t, score, total, tdata = result
+    sl.append((score, total))
+    ctotal += total
+    fulldata[t.id] = tdata, score #, mcds1, mcds2
+    genes.append(t)
+  sl.sort()
+  if verbose : print ('Group data...')
   slp = [None] * len(parts)
   s, ip = 0, 0
   for score, t in sl:
@@ -512,32 +602,20 @@ def estimate_tis_bg_inframe(gtfpath, bampaths, genomefapath, parts = [0.25, 0.5,
       slp[ip] = score
       ip += 1
   if ip < len(parts) : slp[ip] = score
-  if verbose : print slp
+  if verbose : print (slp)
   for t in genes:
-    cnts, score = fulldata[t.gid]
+    tdata, score = fulldata[t.id]
     ip = pidx(score, slp) #ip = sl_idx(score, sl, parts)
-    start = t.cds_start(cdna = True)
-    if start is None : print t.gid, t.id
-    tl = t.cdna_length()
-    tsq = tools.gtf2seq(genome, t)
-    for i, c in enumerate(cnts) : # range(start, tl - ntail):
-      #if i not in cnts: continue # ignore 0s
-      if harrwidth is not None and i < harrwidth : continue # Only skip known harr region
-      if skip_tis and orf.is_start(tsq, start + 3*i, alt = alt_tis, flank = 0) : continue # i in mcds1: continue
-      data[ip].record(c)
-      
-  print 'Estimate NB parameters...'
-  #paras = []
-  #slp = [pidx_uplim(i, sl, parts) for i in range(len(parts))]
-  #print len(sl), slp
-  if numProc <= 1 : paras = map(_est_nb_lower, data)
+    data[ip].merge(tdata)
+  if verbose : print ('Estimate NB parameters...')
+  if numProc <= 1 : paras = list(map(_est_nb_lower, data))
   else : 
-    paras = pool.map(_est_nb, data) #[(da, maxqt) for da in data])
+    paras = list(pool.map(_est_nb, data)) #[(da, maxqt) for da in data])
     pool.close()
-  #sl = genes = fulldata = '' # release memory?
   return paras, slp, data
 
-def _selectMAXCDS(g):
+
+def _selectMAXCDS(g): # old
   maxlen, mt = 0, None
   for t in g.trans:
     cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) 
@@ -546,9 +624,9 @@ def _selectMAXCDS(g):
     if cdslen % 3 != 0 : continue
     if cdslen > maxlen : maxlen, mt = cdslen, t
   return mt
-def _max_cnts(args):
+def _max_cnts(args): # old
   g, bampath, offdict = args
-  bamfile = bam.bamfile(bampath, "rb")
+  bamfile = bam.Bamfile(bampath, "rb")
   t = _selectMAXCDS(g)
   if t is None : return None
   tl = t.cdna_length()
@@ -556,12 +634,10 @@ def _max_cnts(args):
   if tis.total == 0 : return None
   tis.score = tis.abdscore()
   return tis
-def estimate_tis_bg(gtfpath, bampath, genomefapath, parts = [0.25, 0.5, 0.75], offdict = None, skip_tis = True, alt_tis = True, addchr = False, numProc = 1, verbose = False):
+def estimate_tis_bg(gtfpath, bampath, genomefapath, parts = [0.25, 0.5, 0.75], offdict = None, skip_tis = True, alt_tis = True, addchr = False, numProc = 1, verbose = False): # old
   parts.sort()
   if parts[-1] < 1 : parts.append(1)
-  #bamfile = bam.bamfile(bampath, "rb")
   gtffile = open(gtfpath, 'r')
-  from zbio import fa
   genome = fa.Fa(genomefapath)
   fulldata, genes, sl = {}, [], []
   data = [exp.readdict() for i in range(len(parts))]
@@ -580,48 +656,34 @@ def estimate_tis_bg(gtfpath, bampath, genomefapath, parts = [0.25, 0.5, 0.75], o
     sl.append((tis.score, tis.total))
     fulldata[tis.trans.gid] = tis #.cnts, tis.score #, mcds1, mcds2
     genes.append(tis.trans)
-    #sl.append(score)
-    #fulldata[t.gid] = cnts, score #, mcds1, mcds2
-    #genes.append(t)
-    #print g.id, fulldata[g.id]
-  print 'total =', total
-  print 'Sorting...'
+  if verbose : print ('total = {}'.format(total))
+  if verbose : print ('Sorting...')
   sl.sort()
-  print 'Group data...'
+  if verbose : print ('Group data...')
   s, ip, slp = 0, 0, [None] * len(parts)
   for score, t in sl:
     s += t
     if s >= total * parts[ip] : 
-      #print s, ip, parts[ip]
       slp[ip] = score
       ip += 1
   if ip < len(parts) : slp[ip] = score
-  if verbose : print slp
-  #result.append(allbg(genes, fulldata, slp))
-  #return result
+  if verbose : print (slp)
   for t in genes:
     tis = fulldata[t.gid]
     ip = pidx(tis.score, slp)
-    #ip = sl_idx(score, sl, parts)
     cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True)
-    if cds1 is None : print t.gid, t.id
+    if cds1 is None : print ('No CDS', t.gid, t.id)
     tl = t.cdna_length()
     tsq = tools.gtf2seq(genome, t)
-    #for i, c in tis.cnts_enum() : # range(start, tl - ntail):
     for i in range(cds1+3, cds2, 3) :
-
       codon = tsq[i:i+3].upper()
       if codon in orf.cstart or codon in orf.cstartlike : continue
-      #elif codon in orf.cstartlike : cdsin_near[ip].record(c)
       data[ip].record(tis.cnts[i])
       
-  print 'Estimate NB parameters...'
-  #paras = []
-  #slp = [pidx_uplim(i, sl, parts) for i in range(len(parts))]
-  #print len(sl), slp
-  if numProc <= 1 : paras = map(_est_nb, data)
+  if verbose : print ('Estimate NB parameters...')
+  if numProc <= 1 : paras = list(map(_est_nb, data))
   else : 
-    paras = pool.map(_est_nb, data) #[(da, maxqt) for da in data])
+    paras = list(pool.map(_est_nb, data)) #[(da, maxqt) for da in data])
     pool.close()
   return paras, slp, data
 
@@ -635,15 +697,16 @@ def frame_bias(arr): # ['0', '1', '2', '01', '02', '12', '012']
 
 ################### Quality Control ###########################
 
-# Calculate several distributions for quality control
 class lenDis:
+  '''Calculate several distributions for quality control
+  '''
   def __init__(self, lens, dis, tl = 0, cds1 = 0, cds2 = 0):
     d = dis[1] - dis[0]
     self.dis = dis
     self.lens = lens
     self.cds1, self.cds2 = cds1, cds2
     self.d1, self.d2 = {}, {} #sum of reads near start or stop condons
-    self.d1d, self.d2d = {}, {}
+    self.d1d, self.d2d = {}, {} # distributions of d1, d2
     self.df = {} # distribution of frame
     self.dc = {}
     self.l = {}
@@ -652,10 +715,12 @@ class lenDis:
       self.l[l] = 0
       self.d1[l] = [0] * d
       self.d2[l] = [0] * d
-      self.d1d[l] = [exp.readdict() for i in range(d)]
-      self.d2d[l] = [exp.readdict() for i in range(d)]
-      self.cnts[l] = [0] * tl
+      self.d1d[l] = [exp.ReadDict() for i in range(d)]
+      self.d2d[l] = [exp.ReadDict() for i in range(d)]
+      self.cnts[l] = [0] * tl # for transcript level
   def record(self, l, i):
+    '''record a read with length l and 5' end position i
+    '''
     self.l[l] += 1
     self.cnts[l][i] += 1
     ir = i - self.cds1
@@ -663,8 +728,10 @@ class lenDis:
     ir = i - self.cds2
     if self.dis[0] <= ir < self.dis[1] : self.d2[l][ir - self.dis[0]] += 1
   def disFrame(self):
+    '''calculate frame distribution
+    '''
     for l in self.d1: 
-      self.df[l] = [exp.readdict() for i in range(codonSize)] # reset
+      self.df[l] = [exp.ReadDict() for i in range(codonSize)] # reset
       for i in range(self.cds1, self.cds2 + codonSize, codonSize):
         io = i - defOffset - codonSize # -15 -> stop
         if io < 0 : continue
@@ -672,17 +739,19 @@ class lenDis:
           self.df[l][i2].record(self.cnts[l][io+i2]) #
     return self.df
   def disCDS(self, bins = 20):
+    '''calculate CDS profile
+    '''
     bins = int(bins)
     if bins < 2 : bins = 2
     self.bins = bins
-    length = (self.cds2 - self.cds1) / codonSize + 1 # One more codon 
+    length = (self.cds2 - self.cds1) // codonSize + 1 # One more codon 
     binsize = float(length) / bins
     for l in self.d1 : 
       self.dc[l] = [[0.0] * bins for i in range(codonSize)]
     if binsize == 0 : return self.dc
     
     for l in self.d1 : 
-      cfcnts = [[0] * length for j in range(codonSize)]
+      cfcnts = [[0] * length for j in range(codonSize)] # profile in 3 frames
       for si in range(length) :
         for j in range(codonSize) : 
           io = si * codonSize + j + self.cds1 - defOffset - codonSize
@@ -692,51 +761,47 @@ class lenDis:
         start = binsize * i
         stop = start + binsize
         si1, si2 = int(start), int(stop)
-        if si1 == si2 : 
+        if si1 == si2 : # within one base/codon
           for j in range(codonSize) : self.dc[l][j][i] = cfcnts[j][si1]
-        else : 
+        else : # start, stop in different bases
           for j in range(codonSize) : 
-            if si1 < start : self.dc[l][j][i] += cfcnts[j][si1] * (si1 + 1 - start)
+            if si1 < start : self.dc[l][j][i] += cfcnts[j][si1] * (si1 + 1 - start) # start is between si1 and si1 + 1
             else : self.dc[l][j][i] += cfcnts[j][si1]
             for si in range(si1 + 1, si2) : self.dc[l][j][i] += cfcnts[j][si]
-            #print binsize, length, si2, stop, l, j, i
             if i < bins - 1 and si2 < stop : self.dc[l][j][i] += cfcnts[j][si2] * (stop - si2)
             self.dc[l][j][i] /= binsize
-    #print self.dc[29][0]
     return self.dc
   def merge(self, other):
+    '''merge all data from transcript together
+    '''
     for l in other.d1: 
       self.l[l] += other.l[l]
       for di in range(other.dis[1] - other.dis[0]):
         self.d1d[l][di].record(other.d1[l][di])
         self.d2d[l][di].record(other.d2[l][di])
-      if l not in self.df : self.df[l] = [exp.readdict() for i in range(codonSize)]
+      if l not in self.df : self.df[l] = [exp.ReadDict() for i in range(codonSize)]
       for i2 in range(codonSize):
         self.df[l][i2].merge(other.df[l][i2]) #
       if l not in self.dc: self.dc[l] = [[0.0] * other.bins for i in range(codonSize)]
       for j in range(codonSize) :
         for i in range(other.bins):
           self.dc[l][j][i] += other.dc[l][j][i]
-    #print self.dc[29][0]
   def size(self):
     return sum(self.l.values())
   def write(self, outfile):
-    #outfile = open(output, 'w')
     md1, md2 = {}, {}
     mdf = {}
     for l in self.l: 
       md1[l] = [d.sum() for d in self.d1d[l]] #[0] * len(dis1[l])
       md2[l] = [d.sum() for d in self.d2d[l]] #[0] * len(dis2[l])
       mdf[l] = [d.sum() for d in self.df[l]]
-    print >>outfile, self.l
-    print >>outfile, md1
-    print >>outfile, md2
-    print >>outfile, mdf
-    print >>outfile, self.dc
+    outfile.write('{}\n{}\n{}\n{}\n{}\n'.format(self.l, md1, md2, mdf, self.dc))
 
 def _lendis_gene(args):
+  '''quality profile for each gene, not used
+  '''
   g, bampath, lens, dis, ccds, minR, m0, cdsBins = args
-  bamfile = bam.bamfile(bampath, "rb")
+  bamfile = bam.Bamfile(bampath, "rb")
   maxlen = 0
   mt = None
   for t in g.trans:
@@ -777,19 +842,54 @@ def _lendis_gene(args):
     tdm.cnts = {}
     result += [tdm]
   return result
-  
-def lendis(gtfpath, bampath, lens = [25,35], dis = [-40,20], ccds = False, minR = 1, m0 = True, cdsBins = 20, numProc = 1, addchr = False, verbose = False):
-  gtffile = open(gtfpath,'r')
+
+def _lendis_trans(args):
+  '''quality profile in each transcript
+  '''
+  t, bampath, lens, dis, ccds, minR, m0, cdsBins = args
+  bamfile = bam.Bamfile(bampath, "rb")
+  tl = t.cdna_length()
+  cds1, cds2 = t.cds_start(cdna = True), t.cds_stop(cdna = True) - codonSize
+  td = lenDis(lens, dis, tl, cds1, cds2)
+  if m0: tdm = lenDis(lens, dis, tl, cds1, cds2)
+  tr = 0 # Total reads
+  for r in bam.transReadsIter(bamfile, t, mis = 2, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary):
+    if m0 : ism0 = r.is_m0()
+    l = r.cdna_length()
+    if l < lens[0] or l >= lens[1]: continue # not in given length range
+    i = t.cdna_pos(r.genome_pos(0)) # 5' end 
+    if i is None : continue
+    tr += 1
+    if not m0 or not ism0 : 
+      td.record(l, i)
+    else : 
+      tdm.record(l, i)
+  if tr < minR : return None
+  td.disFrame()
+  td.disCDS(bins = cdsBins)
+  td.cnts = {} # release memory
+  result = [td]
+  if m0 : 
+    tdm.disFrame()
+    tdm.disCDS(bins = cdsBins)
+    tdm.cnts = {}
+    result += [tdm]
+  return result
+def lendis(genepath, bampath, lens = [25,35], dis = [-40,20], ccds = False, minR = 1, m0 = True, cdsBins = 20, numProc = 1, addchr = False, verbose = False, geneformat = 'auto'):
+  '''distributions of different reads length, for quality control
+  '''
+  #gtffile = open(gtfpath,'r')
   ad = lenDis(lens, dis)
   if m0: adm = lenDis(lens, dis)
 
-  gene_iter = gtf.gtfgene_iter(gtffile, addchr = addchr, verbose = verbose)
+  #gene_iter = gtf.gtfgene_iter(gtffile, addchr = addchr, verbose = verbose)
+  trans_iter = io.transSelectIter(genepath, fileType = geneformat, verbose = verbose)
   rep = itertools.repeat
-  para_iter = itertools.izip(gene_iter, rep(bampath), rep(lens), rep(dis), rep(ccds), rep(minR), rep(m0), rep(cdsBins))
-  if numProc <= 1 : len_iter = itertools.imap(_lendis_gene, para_iter)
+  para_iter = itertools.izip(trans_iter, rep(bampath), rep(lens), rep(dis), rep(ccds), rep(minR), rep(m0), rep(cdsBins))
+  if numProc <= 1 : len_iter = itertools.imap(_lendis_trans, para_iter) #_lendis_gene
   else : 
     pool = Pool(processes = numProc - 1)
-    len_iter = pool.imap_unordered(_lendis_gene, para_iter, chunksize = 20)
+    len_iter = pool.imap_unordered(_lendis_trans, para_iter, chunksize = 20) #_lendis_gene
     
   for result in len_iter:
     if result is None : continue
@@ -800,19 +900,11 @@ def lendis(gtfpath, bampath, lens = [25,35], dis = [-40,20], ccds = False, minR 
   if m0 : results += [adm]
   return results
 
-def meandis(dis, geomean = False, add = 100):
-  mdis = {}
-  for l in dis: 
-    mdis[l] = [0] * (d)
-    for di in range(d): 
-      if geomean: mdis[l][di] = dis[l][di].geomean(add = add)
-      else : mdis[l][di] = dis[l][di].mean()
-  return mdis
-#print lendis
-#print mdis1
-#print mdis2
+
 def lendisM0(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, minMapQ = minMapQ, minR = 1):
-  bamfile = bam.bamfile(bampath, "rb")
+  '''old version, do not seperate mismatch at 0
+  '''
+  bamfile = bam.Bamfile(bampath, "rb")
   gtffile = open(gtfpath,'r')
   d = dis[1] - dis[0]
   dis1, dis2 = {}, {} #sum of reads near start or stop condons
@@ -881,7 +973,9 @@ def lendisM0(gtfpath, bampath, lens = [26,35], dis = [-40,20], maxNH = maxNH, mi
         if s != '' : fbias[l][s] += 1
   return lendis, dis1, dis2, disf, fbias
 
-def quality(arr, threshold = 0.6, comment = False): # Quality estimation by RPF frame distribution
+def quality(arr, threshold = 0.6, comment = False): 
+  '''Quality estimation by RPF frame distribution
+  '''
   good = 0.7
   m = max(arr)
   for i, a in enumerate(arr):
@@ -899,6 +993,8 @@ def quality(arr, threshold = 0.6, comment = False): # Quality estimation by RPF 
   return use, frame, txt
 
 def getTIS(arr, dis = [-40,20], defOffset = defOffset) :
+  '''get position of max count for TIS data
+  '''
   m = max(arr)
   mis = [ i + dis[0] for i, n in enumerate(arr) if n == m]
   md, mp = 40, -defOffset
@@ -907,9 +1003,10 @@ def getTIS(arr, dis = [-40,20], defOffset = defOffset) :
       md, mp = abs(i + defOffset), i
   return mp
 def TISquality(arr, dis = [-40,20], defOffset = defOffset, flank = 3, threshold = 0.5, comment = False) :
+  '''quality for TIS data
+  '''
   good = 0.7
   mp = getTIS(arr, dis, defOffset)
-  #print mp
   frame = mp % 3
   i = mp - dis[0]
   y0 = arr[i-1:i+2]
@@ -924,8 +1021,10 @@ def TISquality(arr, dis = [-40,20], defOffset = defOffset, flank = 3, threshold 
     if m < good : txt += 'pass'
     else : txt += 'good'
   return use, frame, txt, mp
-# Estimate RPF P site offset distance
+# 
 def get_offset(arr, dis = [-40,20], frame = 0, defOffset = defOffset, flank = 6, tis = False): 
+  ''' Estimate RPF P site offset distance, return offset and threshold
+  '''
   a0 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] <= - defOffset - flank]
   a1 = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] > - defOffset - flank]
   ai = [x for i, x in enumerate(arr) if (i + dis[0]) % codonSize == frame and i + dis[0] > - defOffset - flank and i + dis[0] < - defOffset + flank]
@@ -938,7 +1037,6 @@ def get_offset(arr, dis = [-40,20], frame = 0, defOffset = defOffset, flank = 6,
   aim = max(ai)
   #th = int(((a0m + 1) * (a1m + 1)) ** 0.5)
   th = int((a0m + a1m) / 6.0) ###
-  #print th
   for p in range(-defOffset - flank + 1, -defOffset + flank):
     if p % codonSize != frame : continue
     if tis :
@@ -947,6 +1045,17 @@ def get_offset(arr, dis = [-40,20], frame = 0, defOffset = defOffset, flank = 6,
   return None, th
 
 
-def write_off_para(parafile, offdict): # Generate python code of offset function for parameter file
-  print >>parafile, 'offdict =', offdict
-  #print >>parafile, offsetFuncStr
+def write_off_para(parafile, offdict):
+  '''Generate python code of offset function for parameter file
+  '''
+  parafile.write('offdict = {}\n'.format(formatdict(offdict)))
+def formatdict(d, tab=1):
+  '''show dict in ordered manner
+  '''
+  s = '{'
+  ks = sorted(d)
+  for k in ks:
+    if type(d[k]) == dict : s += '{}: {}, '.format(repr(k), formatdict(d[k], tab+1))
+    else : s += '{}: {}, '.format(repr(k), repr(d[k]))
+  s = s[:-2] + '}'
+  return s
