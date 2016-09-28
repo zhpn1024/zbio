@@ -751,7 +751,7 @@ class rankSumTiesExact:
     else use normal mwtest
     '''
     if self.n <= th or self.N - self.n <= th : return self.fastTest(delta = delta) #, True
-    if self.complexity() <= 2 * th * logarr[2] : return self.fastTest(delta = delta) #, True
+    if self.complexity() <= th * logarr[2] : return self.fastTest(delta = delta) #, True
     return self.mwtest() #, False
   def mwtest(self, use_continuity = True, show = False):
     '''normal mwtest, alt = greater, one-tailed

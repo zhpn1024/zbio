@@ -305,10 +305,10 @@ def transReadsIter(bamfile, trans, compatible = True, mis = 0, sense = True, max
       chr = changechr(chr)
       if chr not in bamfile.references : raise StopIteration
   used = {}
-  trans.exons = trans.exons ##
+  #trans.exons = trans.exons ##
   for e in trans.exons : 
     rds = bamfile.fetch_reads(chr=chr, start=e.start, stop=e.stop)#, multiple_iterators=False)
-    for read in rds:
+    for read in rds: #yield read
       #read = Bam(r, bamfile)
       if (read.id, read.start) in used : continue
       if sense and read.strand != trans.strand : continue

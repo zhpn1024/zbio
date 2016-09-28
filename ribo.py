@@ -1,5 +1,5 @@
-import itertools
-from zbio import stat, bam, gtf, exp, orf, tools, io, fa
+import itertools, math
+from zbio import stat, bam, gtf, exp, orf, tools, io, fa, interval
 from multiprocessing import Pool
 
 codonSize = 3
@@ -82,7 +82,7 @@ class Ribo:
       length = stop - start
     if total <= 0 : return None
     if length <= 0 : return None
-    import math
+    #import math
     return math.log(float(total) / length * norm)
   def frame_test(self, start, stop, delta=1e-4, glm = False): 
     '''basic frame test of in frame reads higher than out frame reads in the ORF
@@ -557,7 +557,7 @@ def _cdsCounts(args): # updated for bampath list
   if cds2 < cds1 or (cds2 - cds1) % 3 > 0 : 
     print('Wrong CDS: {} {} {}'.format(t.id, cds1, cds2))
     return None
-  tis = multiRibo(t, bampaths, offdict = offdict, compatible = False)
+  tis = multiRibo(t, bampaths, offdict = offdict, compatible = False) # not compatible
   score = tis.abdscore()
   genome = fa.Fa(genomefapath)
   tsq = genome.transSeq(t) #tools.trans2seq(genome, t)
