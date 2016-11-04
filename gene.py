@@ -1,3 +1,8 @@
+'''
+Gene symbol annotation processing
+Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
+'''
+
 import sys
 Gid = ['ID','GENEID','GI','GID','ENTREZ']
 Sym = ['SYM','SYMBOL','NAME']

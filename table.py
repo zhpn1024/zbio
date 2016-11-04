@@ -1,3 +1,8 @@
+'''
+Table processing
+Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
+'''
+
 indexTypes = (int, str, float)
 def intersect(x, y):
   sy = set(y)
