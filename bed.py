@@ -23,11 +23,12 @@ class Bed3:
       try: lst.append(self.Format[i](l[i]))
       except: 
         if i in (6, 7) : lst.append(lst[1]) # blockstart/stop
-        elif i in (8,) : lst.append(0) # rgb
+        elif i in (8,) : lst.append('0') # rgb
         elif i == 9 : lst.append(1)
         elif i == 10 : lst.append((lst[2]-lst[1],))
         elif i == 11 : lst.append((0,))
-        else : lst.append('.')
+        elif i in (3,4,5) : lst.append('.')
+        else : raise ValueError
     self.items = tuple(lst)
     self.symbol = self.gid = self.tid = self.id ###
     self.genetype = ''
@@ -277,6 +278,7 @@ class Bed6(Bed3):
 
 def com2tup(s): #comma string to tuple
   if type(s)==tuple: return s
+  if type(s)==list: return tuple(s)
   return tuple(map(int,s.strip().strip(',').split(',')))
 def tup2com(t): #tuple to comma string
   if type(t)==str: return t
@@ -391,7 +393,13 @@ class Bed12(Bed6):
     if self.strand=="-": self._introns = a[::-1]
     else : self._introns = a
     return self._introns
-  
+
+  def abs2relative(self):
+    '''change absolute blockStart values to relative values
+    '''
+    blockstarts = [st - self.start for st in self.blockStarts]
+    return self(blockStarts = blockstarts)
+
   def cdna_pos(self, p, strict = False):
     '''if strict is True, the 3' end of exon will be considered as not in the transcript,
     if strict is False, 3' end of exon will be considered as start of the next exon, 
@@ -411,6 +419,7 @@ class Bed12(Bed6):
         else: pos+=p1-self.blockStarts[i]
         return pos
       else: pos+=self.blockSizes[i]
+      #print(pos)
     else: return None
 
   def genome_pos(self, p, bias=1):

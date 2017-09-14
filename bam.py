@@ -14,15 +14,34 @@ def changechr(chr):
   elif chr[0:3] == 'chr' : return chr[3:]
   else : return chr
 
+chrmap = {}
+    
 class Bamfile(pysam.Samfile):
   def __repr__(self):
     return 'pysam.Samfile '+self.filename
+  def get_chrname(self, chr) : #, chrmap = chrmap):
+    #sprint(chrmap)
+    if chr in self.references : return chr
+    if chr in chrmap :
+      chr1 = chrmap[chr]
+      if chr1 in self.references : return chr1
+      else : 
+        chr2 = changechr(chr1)
+        if chr2 in self.references : return chr2
+    chr1 = changechr(chr)
+    if chr1 == chr : return None
+    if chr1 in self.references : return chr1
+    elif chr1 in chrmap : 
+      chr2 = chrmap[chr1]
+      if chr2 in self.references : return chr2
+    return None
   def fetch_reads(self, chr, start, stop, maxNH = None, minMapQ = None, secondary = False, paired = False) : #, multiple_iterators=False):
-    if chr not in self.references : 
-      chr = changechr(chr)
-      if chr not in self.references : 
-        print("chr {} not found in Bamfile!".format(chr))
-        raise StopIteration
+    chr0, chr = chr, self.get_chrname(chr)
+    #if chr not in self.references : 
+      #chr = changechr(chr)
+    if chr is None : 
+      print("chr {} not found in Bamfile!".format(chr0))
+      raise StopIteration
     rds = self.fetch(reference=chr, start=start, end=stop) #, multiple_iterators=multiple_iterators)
     r1, r2 = {}, {}
     for read in rds:
@@ -133,7 +152,9 @@ class Bam():#AlignedRead
     else : return "Bam paired AlignedSegment {} {}".format(self.id, str(self))
   def __str__(self):
     return "%s:%d-%d:%s" % (self.chr, self.fragment_start, self.fragment_stop, self.strand)
-  
+
+  def get_tag(self, k):
+    return self.read.get_tag(k)
   def cdna_length(self): 
     return self.read.query_alignment_length
     #else : return self.fragment_length()
@@ -406,10 +427,14 @@ class Bam():#AlignedRead
 def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, minMapQ = None, secondary = False): 
   '''compatible version of transReadsIter, slightly different
   '''
-  chr = trans.chr
-  if chr not in bamfile.references : 
-      chr = changechr(chr)
-      if chr not in bamfile.references : raise StopIteration
+  chr = bamfile.get_chrname(trans.chr)
+  if chr is None : raise StopIteration
+    #print("chr {} not found in Bamfile!".format(chr0))
+    #raise StopIteration
+  #chr = trans.chr
+  #if chr not in bamfile.references : 
+      #chr = changechr(chr)
+      #if chr not in bamfile.references : raise StopIteration
   rds = bamfile.fetch(reference=chr, start=trans.start, end=trans.stop)#, multiple_iterators=False)
   #introns = trans.introns
   for r in rds:
@@ -432,10 +457,14 @@ def compatible_bam_iter(bamfile, trans, mis = 0, sense = True, maxNH = None, min
 def transReadsIter(bamfile, trans, compatible = True, mis = 0, sense = True, maxNH = None, minMapQ = None, secondary = False, paired = False):
   '''fetch reads from transcript exons
   '''
-  chr = trans.chr
-  if chr not in bamfile.references : 
-      chr = changechr(chr)
-      if chr not in bamfile.references : raise StopIteration
+  chr = bamfile.get_chrname(trans.chr)
+  if chr is None : 
+    #print("chr {} not found in Bamfile!".format(trans.chr))
+    raise StopIteration
+  #chr = trans.chr
+  #if chr not in bamfile.references : 
+      #chr = changechr(chr)
+      #if chr not in bamfile.references : raise StopIteration
   if compatible : 
     from . import interval
     transitv = interval.trans2interval(trans)
@@ -520,7 +549,7 @@ def getBamLoadChr(args):
   return BamLoadChr(bampath, chr, region, strand, posFunc, maxNH, minMapQ, secondary)
 
 class BamLoadChr:
-  def __init__(self, bampath, chr, region = None, strand = '.', posFunc = end5, maxNH = None, minMapQ = None, secondary = False):
+  def __init__(self, bampath, chr, region = None, strand = '.', posFunc = end5, maxNH = None, minMapQ = None, secondary = False, paired = False):
     self.chr = chr
     self.strand = strand
     self.bampath = bampath
@@ -529,14 +558,17 @@ class BamLoadChr:
     else : self.data = {strand:{}}
     if bampath is None : return
     bamfile = Bamfile(bampath)
-    if chr not in bamfile.references : 
-      chr = changechr(chr)
-      if chr not in self.references : 
-        print("chr {} not found in Bamfile!".format(self.chr))
-        return
+    chr = bamfile.get_chrname(chr)
+    if chr is None : #raise StopIteration
+    #if chr not in bamfile.references : 
+      #chr = changechr(chr)
+      #if chr not in bamfile.references : 
+      print("chr {} not found in Bamfile!".format(self.chr))
+      return
+    self.chr = chr
     if region is None : region = [[None, None]]
     for start, stop in region : 
-      for r in bamfile.fetch_reads(chr, start, stop, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary):
+      for r in bamfile.fetch_reads(chr, start, stop, maxNH = maxNH, minMapQ = minMapQ, secondary = secondary, paired = paired):
         if r.strand not in self.data : continue
         p = posFunc(r)
         #print p
