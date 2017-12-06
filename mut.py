@@ -78,6 +78,19 @@ class MutGenome(fa.Fa):
       for chr in self.mutregion[indel]:
         self.mutregion[indel][chr].check()
 
+  def get_mut(self, chr, start = 0, stop = -1, length = -1, flank = 0):
+    chr, start, stop, length = self.get_pos(chr, start, stop, length)
+    r = interval.Interval(start-flank, stop+flank)
+    ml = []
+    for indel in self.mutregion:
+      if chr in self.mutregion[indel]:
+        intersect = r.intersect(self.mutregion[indel][chr])
+        for itv in intersect.lst:
+          ml.append(self.allmut[self.mutpos[indel][chr][itv[0]]])
+    ml.sort()
+    return ml
+
+
   def fetch(self, chr, start = 0, stop = -1, length = -1, mutsites = None, offset = 0):
     chr, start, stop, length = self.get_pos(chr, start, stop, length)
     if chr is None :

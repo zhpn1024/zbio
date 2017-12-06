@@ -7,8 +7,8 @@ indexTypes = (int, str, float)
 def intersect(x, y):
   sy = set(y)
   return [i for i in x if i in sy]
-class table():
-  def __init__(self, lst = [], sep = '\t', byrow = False):
+class Table():
+  def __init__(self, lst = [], sep = '\t', byrow = False, default = None):
     self.matrix = []
     self.colnames = []
     self.rownames = []
@@ -17,6 +17,9 @@ class table():
     self.is_neat = True
     self.col_indexed = False
     self.row_indexed = False
+    self.ridx = {}
+    self.cidx = {}
+    self.default = default
     if len(lst) > 0 :
       for s in lst:
         self.matrix.append(s.split(sep))
@@ -70,22 +73,24 @@ class table():
     else : nrow = min(nrow, self.nrow)
     if ncol is None : ncol = self.ncol
     else : ncol = min(ncol, self.ncol)
-    s = ''
+    s = []
     if header : 
       if len(self.colnames) == 0 :colnames = list(range(ncol))
       else : colnames = self.colnames
-      if rowname : s += sep
-      s += sep.join([str(x) for x in colnames[0:ncol]]) + '\n'
+      if rowname : s.append(sep)
+      s.append(sep.join([str(x) for x in colnames[0:ncol]]) + '\n')
     for i in range(nrow):
       if rowname : 
-        try : s += str(self.rownames[i]) + sep
-        except : s += str(i) + sep
-      s += sep.join([str(x) for x in self.matrix[i][0:ncol]]) + '\n'
-    return s
-  def headerline(self, sep = '\t'):
-    return sep.join([str(x) for x in self.colnames])
+        try : s.append(str(self.rownames[i]) + sep)
+        except : s.append(str(i) + sep)
+      s.append(sep.join([str(x) for x in self.matrix[i][0:ncol]]) + '\n')
+    return ''.join(s)
+  def headerline(self, sep = '\t', rowname = False):
+    s = sep.join([str(x) for x in self.colnames])
+    if rowname: return 'Rownames\t' + s
+    else: return s # sep.join([str(x) for x in self.colnames])
   def write(self, outfile, header = True, rowname = False, sep = '\t'):
-    if header : outfile.write(self.headerline(sep) + '\n')
+    if header : outfile.write(self.headerline(sep, rowname) + '\n')
     for i in range(self.nrow):
       s = ''
       if rowname :
@@ -94,16 +99,26 @@ class table():
       s += sep.join([str(x) for x in self.matrix[i]])
       outfile.write(s + '\n')
   def indexrow(self):
-    if len(self.rownames) == 0 : return
-    self.ridx = {}
+    #if len(self.rownames) == 0 : return
+    #self.ridx = {}
     for i, key in enumerate(self.rownames):
       self.ridx[key] = i
+    i = len(self.rownames)
+    if i < self.nrow:
+      for i2 in range(i, self.nrow):
+        self.ridx[str(i2)] = i2
+        self.rownames.append(str(i2))
     self.row_indexed = True
   def indexcol(self):
-    if len(self.colnames) == 0 : return
-    self.cidx = {}
+    #if len(self.colnames) == 0 : return
+    #self.cidx = {}
     for i, key in enumerate(self.colnames):
       self.cidx[key] = i
+    i = len(self.colnames)
+    if i < self.ncol:
+      for i2 in range(i, ncol):
+        self.cidx[str(i2)] = i2
+        self.colnames.append(str(i2))
     self.col_indexed = True
   def rowidx(self, i):
     if type(i) == str : 
@@ -123,7 +138,7 @@ class table():
     idx = self.colidx(j)
     #if type(j) == int : idx = j
     #else : idx = self.colnames.index(j)
-    lst = [None] * self.nrow
+    lst = [self.default] * self.nrow
     for i in range(self.nrow):
       try : lst[i] = self.matrix[i][idx]
       except : pass
@@ -151,3 +166,60 @@ class table():
     if len(self.rownames) > 0 : subt.rownames = [self.rownames[self.rowidx(j)] for j in rows]
     subt.check()
     return subt
+  def put(self, row, col, value):
+    if type(row) is int:
+      if row >= 0:
+        i = row
+        if self.nrow < i + 1 :
+          for i2 in range(self.nrow, i+1):
+            self.matrix.append([])
+          self.nrow = i + 1
+          #radd = True
+      else:
+        i = self.nrow + i
+        if i < 0: 
+          print('Invalid negative row: {}'.format(row))
+          return
+    else:
+      if not self.row_indexed:
+        self.indexrow()
+      if row in self.ridx:
+        i = self.ridx[row]
+      else:
+        self.rownames.append(row)
+        i = self.nrow
+        self.nrow += 1
+        self.ridx[row] = i
+        self.matrix.append([])
+        #radd = True
+    
+    if type(col) is int:
+      if col >= 0:
+        j = col
+        if self.ncol < j + 1 :
+          self.ncol = j + 1
+          #radd = True
+      else:
+        j = self.ncol + j
+        if i < 0:
+          print('Invalid negative col: {}'.format(col))
+          return
+    else:
+      if not self.col_indexed:
+        self.indexcol()
+      if col in self.cidx:
+        j = self.cidx[col]
+      else:
+        self.colnames.append(col)
+        j = self.ncol
+        self.ncol += 1
+        self.cidx[col] = j
+
+    l = len(self.matrix[i])
+    if l < j+1:
+      self.matrix[i] += [self.default] * (j+1-l)
+    self.matrix[i][j] = value
+
+    return i, j, value
+
+
