@@ -40,11 +40,13 @@ class Interval:
     for itv in self.lst: l += itv[1] - itv[0]
     return l
   def __repr__(self):
-    s = 'interval '+ self.id + ':'
-    if len(self.lst) == 0 : s += ' empty!'
-    for itv in self.lst:
-      s += ' [{}, {})'.format(itv[0],itv[1])
-    return s
+    s = ['interval '+ self.id + ':']
+    if len(self.lst) == 0 : s.append('empty!')
+    #for itv in self.lst:
+    else: s += ['[{}, {})'.format(itv[0],itv[1]) for itv in self.lst]
+    return ' '.join(s)
+  def __str__(self):
+    return ','.join(['{}-{}'.format(itv[0],itv[1]) for itv in self.lst])
   def __getitem__(self, i): 
     return self.lst[i]
   def __add__(self, other): # do not change self
@@ -221,7 +223,40 @@ class Interval:
     si = self.intersect([(p1, p2)])
     oi = other.intersect([(p1, p2)])
     return si.sub(oi), oi.sub(si)
-    
+  def genome_pos(self, p, strand = '+', bias = 1): # exon only
+    if len(self) == 0: return None
+    m = self.rlen() # cdna_length()
+    if p < 0 or p > m: return None
+    if strand == '-': 
+      p = m - p
+      bias = 1 - bias
+    if p == 0 : return self.start
+    if p == m: return self.stop
+    p1 = p
+    for itv in self.lst:
+      l = itv[1] - itv[0]
+      if l - p1 >= bias:
+        return p1 + itv[0] # e.start
+      else:
+        p1 -= l
+    return None
+  def cdna_pos(self, p, strand = '+', strict = False):
+    '''if strict is True, the 3' end of exon will be considered as not in the transcript,
+    if strict is False, 3' end of exon will be considered as start of the next exon, 
+    or transcript end (self.cdna_length()) if in the last exon.
+    '''
+    if len(self.lst) == 0 : return None
+    i, c = self.nearest(p)
+    if c != 0 : return None
+    if strict:
+      if strand != '-' and p == self.lst[i][1]: return None
+      if strand == '-' and p == self.lst[i][0]: return None
+    pos = sum([self.lst[j][1] - self.lst[j][0] for j in range(i)])
+    pos += p - self.lst[i][0]
+    if strand == '-': 
+      pos = self.rlen() - pos
+    return pos
+ 
 def trans2interval(t, start = 0, stop = None):
   '''generate intervals for a transcript
   start, stop are cDNA positions
@@ -302,4 +337,8 @@ def allTransRegions(trans):
   for chr in regions: regions[t.chr].check()
   return regions
 
-        
+def str2interval(s, blocksep = ',', rangesep = '-', id = ''):
+  itvs = [map(int, b.split(rangesep)) for b in s.split(blocksep)]
+  return Interval(itvs=itvs, id=id)
+
+

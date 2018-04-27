@@ -153,7 +153,7 @@ class Table():
     t.check()
     return t
   def subtable(self, rows = None, cols = None):
-    subt = table()
+    subt = Table()
     if rows is None : rows = range(self.nrow)
     if cols is None : cols = range(self.ncol)
     if type(rows) in indexTypes : rows = [rows]

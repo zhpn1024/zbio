@@ -4,8 +4,9 @@ Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
 '''
 
 import math
-from scipy.stats import nbinom, chisquare, chisqprob
-from scipy.special import betaln
+from scipy.stats import nbinom, chisquare # chisqprob
+from scipy.stats import chi2
+from scipy.special import betaln, betainc
 logarr = [None] # log(N)
 logsumarr = [0] # log(N!)
 def logarr_ext(n) : #, logarr = logarr, logsumarr = logsumarr): # prepare log values
@@ -19,6 +20,9 @@ def logarr_ext(n) : #, logarr = logarr, logsumarr = logsumarr): # prepare log va
       #print i, logarr[i]
       logsumarr[i] = logsumarr[i-1] + logarr[i]
   return logarr, logsumarr
+def betainc1(a, b, x):
+  if a == 0: return 1
+  return betainc(a, b, x)
 def data_count(data):
   total, cnt = 0, 0
   for k in data:
@@ -47,7 +51,7 @@ def fisher_method(ps):
     if p == 0 : return 0.0, -1 ###
     fs += - 2 * math.log(p)
     n += 1
-  fp = chisqprob(fs, 2 * n)
+  fp = chi2.sf(fs, 2 * n) # chisqprob(fs, 2 * n)
   return fp, fs
 
 def combination_log(n, k, show = False): 
@@ -163,7 +167,7 @@ def binom_log(n, k, p = 0.5, show = False): #log probability value
   lpr = math.log(p) * k + math.log(1-p) * (n-k)
   lpr += combination_log(n, k)
   return lpr
-def binom_test(n, k, p = 0.5, alt = "g", log = True, show=False): 
+def binom_test0(n, k, p = 0.5, alt = "g", log = True, show=False): 
   '''binomial test, no two sided yet!
   '''
   if not log : return binomTest0(n, k, p, alt, show) # if log, p are calculated with log values
@@ -187,6 +191,18 @@ def binom_test(n, k, p = 0.5, alt = "g", log = True, show=False):
       lpk += lq + logarr[i] - lp - logarr[n - i + 1] #r = q * i / p / (n - i + 1)
       pv += math.exp(lpk)
   return pv
+def binom_test(n, k, p = 0.5, alt = "g"):
+  if alt[0] == 'l':
+    return betainc1(n-k, k+1, 1-p)
+  elif alt[0] == 'g':
+    return betainc1(k, n-k+1, p)
+  else:
+    if k <= n * p:
+      pv = betainc1(n-k, k+1, 1-p)
+    else:
+      pv = betainc1(k, n-k+1, p)
+    return min(pv*2, 1)
+
 def binomTest0(n, k, p = 0.5, alt = "g", show=False): # No two sided yet!
   '''binomial test no log version
   '''
@@ -238,9 +254,12 @@ class NegBinom:
     return nbinom.cdf(k, self.r, self.p)
   def pvalue(self, k = 0, record = True):
     if record : 
-      key = (self.p, self.q)
+      key = (self.r, self.p)
       if key not in self.p_record : self.p_record[key] = {}
       elif k in self.p_record[key] : return self.p_record[key][k]
+    if k == 0: p = 1
+    else: p = betainc(k, self.r, self.q)
+    '''
     p = 1 - nbinom.cdf(k-1, self.r, self.p)
     if p > self.Delta : 
       if record : self.p_record[key][k] = p
@@ -257,7 +276,7 @@ class NegBinom:
       ka += 1
       pa = nbinom.pmf(ka, self.r, self.p)
       p += pa
-    #p += pa
+    #p += pa'''
     if record : self.p_record[key][k] = p
     return p
       
@@ -779,13 +798,13 @@ class rankSumTiesExact:
     '''
     s = sum([v**3 - v for v in self.cd.values() if v > 1])
     return s / float(self.N ** 3 - self.N)
-  def test(self, th = 20, delta = 1e-4):
+  def test(self, th = 10, delta = 1e-4):
     '''if either size <= th, use fastTest
     elif complexity <= th, use fastTest
     else use normal mwtest
     '''
     if self.n <= th or self.N - self.n <= th : return self.fastTest(delta = delta) #, True
-    if self.complexity() <= th * logarr[2] : return self.fastTest(delta = delta) #, True
+    if self.complexity() <= th: return self.fastTest(delta = delta) # * logarr[2]
     return self.mwtest() #, False
   def mwtest(self, use_continuity = True, show = False):
     '''normal mwtest, alt = greater, one-tailed

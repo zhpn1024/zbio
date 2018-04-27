@@ -2,7 +2,7 @@
 Genomic mutation processing
 Copyright (c) 2017 Peng Zhang <zhpn1024@163.com>
 '''
-import fa, interval
+from . import fa, interval
 
 class Mut:
   def __init__(self, chr, pos, mutseq, reflen=1):

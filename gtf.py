@@ -62,7 +62,9 @@ class Exon:
     if p1 < 0 : return ''
     else : p1 += len(key) + 1
     p2 = s.find(';', p1)
-    return eval(s[p1:p2])
+    if p2 == -1 : p2 = None
+    try: return eval(s[p1:p2])
+    except: return s[p1:p2]
   @property
   def length(self):
     return len(self)
@@ -461,9 +463,10 @@ class gtfGene(Exon):
     self.trans = []
     #self.type = lst[1]
   def add_trans(self, tr):
-    if tr.strand != self.strand :
+    if self.strand in ('+', '-') and tr.strand != self.strand :
       print('Inconsistent trans strand: {} {} {} {}'.format(tr.gid, tr.tid, tr.strand, self.strand))
       #tr.strand = self.strand
+      self.strand = '.'
     self.trans.append(tr)
     #self.check()
   def __repr__(self):
