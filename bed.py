@@ -2,6 +2,10 @@
 Bed format annotation processing
 Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
 '''
+def cmp3(a, b):
+  ''' cmp for python3'''
+  return (a > b) - (a < b)
+
 class Bed3:
   ''' Bed3 class for bed3 annotation format, father of Bed6
   '''
@@ -53,18 +57,18 @@ class Bed3:
   @property
   def id(self): #Bed3 only
     return "noname"
-  @property
-  def tid(self):
-    return self.id
-  @property
-  def gid(self):
-    return self.tid
-  @property
-  def symbol(self):
-    return self.gid
-  @property
-  def genetype(self):
-    return ""
+  #@property
+  #def tid(self):
+    #return self.id
+  #@property
+  #def gid(self):
+    #return self.tid
+  #@property
+  #def symbol(self):
+    #return self.gid
+  #@property
+  #def genetype(self):
+    #return ""
   @property
   def score(self): #Bed3 only
     return 0.0
@@ -101,6 +105,14 @@ class Bed3:
     return self.items[i]
   def __cmp__(self, other): #All bed
     return cmp(self.chr,other.chr) or cmp(self.start,other.start) or cmp(self.stop,other.stop)
+  def cmp(self, other):
+    return cmp3(self.chr,other.chr) or cmp3(self.start,other.start) or cmp3(self.stop,other.stop)
+  def __eq__(self, other):
+    return self.cmp(other) == 0
+  def __lt__(self, other):
+    return self.cmp(other) < 0
+  def __gt__(self, other):
+    return self.cmp(other) > 0
   def __sub__(self, other):
     return sub(self, other)
   def intersect(self, other):

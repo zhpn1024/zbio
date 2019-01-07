@@ -2,6 +2,12 @@
 Expression profile processing
 Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
 '''
+def cmp3(a, b):
+  ''' cmp for python3'''
+  if a is None:
+    if b is None: return 0
+    else: return -1
+  return bool(a > b) - bool(a < b)
 
 import math
 class Exp(): #values for one gene/trans/probe
@@ -29,6 +35,19 @@ class Exp(): #values for one gene/trans/probe
       c = c or cmp(self.value[i], other.value[i])
       if c != 0: break
     return c
+  def cmp(self, other):
+    c = 0
+    for i in range(len(self.value)):
+      c = c or cmp3(self.value[i], other.value[i])
+      if c != 0: break
+    return c
+  def __eq__(self, other):
+    return self.cmp(other) == 0
+  def __lt__(self, other):
+    return self.cmp(other) < 0
+  def __gt__(self, other):
+    return self.cmp(other) > 0
+
   def headerline(self, showanno = False, sep='\t'):# Header string
     sep=str(sep)
     s = 'id' + sep

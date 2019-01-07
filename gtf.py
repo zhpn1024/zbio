@@ -19,6 +19,9 @@ def changechr(chr):
   elif chr == 'chrM' : return 'MT'
   elif chr[0:3] == 'chr' : return chr[3:]
   else : return chr
+def cmp3(a, b):
+  ''' cmp for python3'''
+  return (a > b) - (a < b)
 
 class Exon:
   '''exon in gtf format, 0 based, similar as bed
@@ -31,6 +34,7 @@ class Exon:
     self.type, self.score, self.attrstr = lst[2], lst[5], lst[8]
     self.gff, self.addchr, self.frame = gff, addchr, lst[7]
     self.lst = lst
+    self.exons = [self]
   def __repr__(self):
     return self.chr + ':'+str(self.start)+'-'+str(self.stop)+':'+self.strand
   def __str__(self, sep = '\t', new = False):
@@ -43,6 +47,14 @@ class Exon:
     return "%s:%d-%d:%s" % (self.chr, self.start, self.stop, self.strand)
   def __cmp__(self, other):
     return cmp(self.chr,other.chr) or cmp(self.start,other.start) or cmp(self.stop,other.stop)
+  def cmp(self, other):
+    return cmp3(self.chr,other.chr) or cmp3(self.start,other.start) or cmp3(self.stop,other.stop)
+  def __eq__(self, other):
+    return self.cmp(other) == 0
+  def __lt__(self, other):
+    return self.cmp(other) < 0
+  def __gt__(self, other):
+    return self.cmp(other) > 0
   def __len__(self): 
     return self.stop - self.start
   def attr(self, key):
@@ -98,7 +110,13 @@ class Exon:
     return self.sym_c
   @property
   def id(self):
-    return self.attr('exon_id')
+    try: return self._id
+    except:
+      self._id = self.attr('exon_id')
+      return self._id
+  @id.setter
+  def id(self, value):
+    self._id = value
   @property
   def end5(self): #5' end, all bed
     if self.strand != '-' : return self.start
@@ -168,9 +186,9 @@ class Exon:
     #self.attr = other.attr
     self.gff, self.addchr, self.frame = other.gff, other.addchr, other.frame
     self.lst = other.lst
-  @property
-  def exons(self):
-    return [self]
+  #@property
+  #def exons(self):
+    #return [self]
   def cds_start(self, cdna = False): return None
   def cds_stop(self, cdna = False): return None
     
