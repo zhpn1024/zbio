@@ -4,6 +4,11 @@ Copyright (c) 2017 Peng Zhang <zhpn1024@163.com>
 '''
 from . import fa, interval
 
+try: cmp
+except:
+  def cmp(a, b):
+    return (a > b) - (a < b)
+
 class Mut:
   def __init__(self, chr, pos, mutseq, reflen=1):
     self.chr = chr

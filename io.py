@@ -3,21 +3,27 @@ File processing
 Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
 '''
 
-def splitIter(filePath, sep = '\t', gz = False, skip = 0, title = None):
+def splitIter(filePath, sep = '\t', gz = False, skip = 0, title = None, encoding = None):
   if type(filePath) is str :
+    filePath = filePath.strip()
     if filePath.split('.')[-1].lower() == 'gz' : gz = True
     if gz :
       import gzip
-      infile = gzip.open(filePath, 'rb')
-    else : infile = open(filePath, 'r')
+      try: infile = gzip.open(filePath, 'rt', encoding=encoding)
+      except: infile = gzip.open(filePath)
+    else :
+      try: infile = open(filePath, 'r', encoding=encoding)
+      except: infile = open(filePath)
   else : infile = filePath
   for i in range(skip):
     l = next(infile)
   if title is not None : 
     l = next(infile)
+    #if gz: l = l.decode()
     lst = l.rstrip('\n').split(sep)
     title[:] = lst
   for l in infile : 
+    #if gz: l = l.decode()
     lst = l.rstrip('\n').split(sep)
     yield lst
 
@@ -27,7 +33,7 @@ def transIter(filePath, fileType = 'auto', gz = False, **kwargs):
   if filePath.split('.')[-1].lower() == 'gz' : gz = True
   if gz :
     import gzip
-    infile = gzip.open(filePath, 'rb')
+    infile = gzip.open(filePath, 'rt')
   else : infile = open(filePath, 'r')
   if fileType == 'auto' : fileType = suffixType(filePath, gz)
   if fileType == 'bed' :
@@ -50,7 +56,7 @@ def geneIter(filePath, fileType = 'auto', gz = False, **kwargs):
   if filePath.split('.')[-1].lower() == 'gz' : gz = True
   if gz :
     import gzip
-    infile = gzip.open(filePath, 'rb')
+    infile = gzip.open(filePath, 'rt')
   else : infile = open(filePath, 'r')
   if fileType == 'auto' : fileType = suffixType(filePath, gz)
   if fileType == 'bed' :
@@ -74,7 +80,7 @@ def transFetch(filePath, tid, fileType = 'auto', gz = False, **kwargs):
   if filePath.split('.')[-1].lower() == 'gz' : gz = True
   if gz :
     import gzip
-    infile = gzip.open(filePath, 'rb')
+    infile = gzip.open(filePath, 'rt')
   else : infile = open(filePath, 'r')
   if fileType == 'auto' : fileType = suffixType(filePath, gz)
   if fileType == 'bed' :
@@ -99,7 +105,7 @@ def transSelectIter(filePath, fileType = 'auto', gz = False,  **kwargs):
   if filePath.split('.')[-1].lower() == 'gz' : gz = True
   if gz :
     import gzip
-    infile = gzip.open(filePath, 'rb')
+    infile = gzip.open(filePath, 'rt')
   else : infile = open(filePath, 'r')
   if fileType == 'auto' : fileType = suffixType(filePath, gz)
   if fileType == 'bed' :
@@ -129,11 +135,13 @@ def suffixType(filePath, gz = False):
 
 def tabjoin(a, *args) : #, sep = '\t'):
   sep = '\t'
-  if hasattr(a, '__iter__') : #s = sep.join(map(str, a))
-    arr = map(str, a)
+  if type(a) == str: arr = [a]
+  elif hasattr(a, '__iter__') : #s = sep.join(map(str, a))
+    arr = list(map(str, a))
   else : #s = str(a)
     arr = [str(a)]
   for a in args :
-    if hasattr(a, '__iter__') : arr += map(str, a)
+    if type(a) == str: arr.append(a)
+    elif hasattr(a, '__iter__') : arr += map(str, a)
     else : arr.append(str(a))
   return sep.join(arr)

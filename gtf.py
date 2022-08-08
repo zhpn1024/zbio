@@ -4,8 +4,10 @@ Copyright (c) 2016 Peng Zhang <zhpn1024@163.com>
 '''
 
 def add_chr(chr):
-  if chr.isdigit() or chr in ('X','Y','M',): chr = 'chr' + chr
-  elif chr == 'MT' : chr = 'chrM' 
+  if len(chr) <= 3 and (chr.isdigit() or chr in ('X','Y',)): chr = 'chr' + chr
+  elif chr in ('M','MT','MtDNA','mitochondrion_genome','Mito') : chr = 'chrM' 
+  elif len(chr) == 2 and chr[0].isdigit(): chr = 'chr' + chr
+  elif chr in ('I','II','III','IV','V','VI','VII','VIII','IX','XI','XII','XIII','XIV','XV','XVI'): chr = 'chr' + chr
   return chr
 def rm_chr(chr):
   if chr[3:].isdigit() or chr in ('chrX','chrY'): chr = chr[3:]
@@ -102,9 +104,15 @@ class Exon:
     try : return self.tid_c
     except : 
       self.tid_c = self.attr('transcript_id')
-      if self.gff and self.tid_c == '':
-        p = self.attr('Parent')
-        if p.startswith('rna-'): self.tid_c = p[4:]
+      if self.gff: # and self.tid_c == '':
+        if self.lst[2] in ('transcript', 'mRNA', 'tRNA', 'rRNA'):
+          self.tid_c = self.id
+        else:
+          p = self.attr('Parent')
+          if p.startswith('rna-'): self.tid_c = p[4:]
+          elif p.startswith('gene-'): self.tid_c = p[5:]
+          elif p.startswith('rna'): self.tid_c = p
+          elif p.startswith('gene'): self.tid_c = p
       return self.tid_c
   @property
   def symbol(self):
@@ -118,6 +126,7 @@ class Exon:
     try: return self._id
     except:
       self._id = self.attr('exon_id')
+      if self._id == '': self._id = self.attr('ID')
       return self._id
   @id.setter
   def id(self, value):
@@ -173,8 +182,19 @@ class Exon:
     else : 
       if strict : return p <= self.start
       else : return p < self.start
-  def cdna_pos(self, p, strict = False): # exon only
+  def flank_pos(self, p, flank = 100):
+    if flank < 0: return None
+    if self.start - flank <= p <= self.start:
+      if self.strand != '-': return p - self.start # upstream
+      else: return self.start - p + self.cdna_length()
+    if self.stop <= p <= self.stop + flank:
+      if self.strand != '-': return p - self.stop + self.cdna_length()
+      else: return self.stop - p # upstream
+    return None
+
+  def cdna_pos(self, p, strict = False, flank = 0): # exon only
     if self.is_contain(p, strict): return abs(p-self.end5)
+    elif flank > 0: return self.flank_pos(p, flank)
     else: return None
   def genome_pos(self, p, bias = 1): # exon only
     m = self.cdna_length()
@@ -238,7 +258,8 @@ class gtfTrans(Exon):
   '''
   def __init__(self, lst, gff = False, addchr = False): 
     Exon.__init__(self, lst, gff, addchr)
-    self.id = self.tid
+    if self.tid != '': self.id = self.tid
+    elif self.id != '': self.tid_c = self.id
     #self.type = lst[1]
     self.exons = []
     self.cds = []
@@ -304,7 +325,9 @@ class gtfTrans(Exon):
     exonStops.sort()
     lst += [tup2com(exonStarts), tup2com(exonStops)]
     return '\t'.join(map(str, lst))
-  def check(self):
+  def check(self, final = True):
+    if final and len(self.exons) == 0:
+      if len(self.cds) > 0: self.exons += self.cds
     for e in self.exons:
       if e.start < self.start: self.start = e.start
       if e.stop > self.stop: self.stop = e.stop
@@ -368,12 +391,11 @@ class gtfTrans(Exon):
     sc = self.stop_codon # Determine by stop codon
     if len(sc) != 3 : 
       for e in self.exons:
-        if sc.end3 == e.end3 : 
+        if sc.end5 == e.end5 : break
+        elif sc.end3 == e.end3 : # bug elif 
           cs = self.cdna_pos(sc.end5) + 3
           if cdna : return cs
           else : return self.genome_pos(cs, 0)
-        if sc.end5 == e.end5 :
-          break
       else : 
         print('Stop codon error : %s %s %s' % (self.gid, self.id, sc.short_str()))
     gs = sc.end3
@@ -430,22 +452,20 @@ class gtfTrans(Exon):
       last = e.end3
     self._introns = introns
     return introns
-  def cdna_pos(self, p, strict = False):
+  def cdna_pos(self, p, strict = False, flank = 0):
     '''if strict is True, the 3' end of exon will be considered as not in the transcript,
     if strict is False, 3' end of exon will be considered as start of the next exon, 
     or transcript end (self.cdna_length()) if in the last exon.
+    if flank is not 0, TSS and TTS flanking regions are returned with negative distance and
+    cDNA length + distance
     '''
-    if not self.is_contain(p, strict) : return None
-    #if p < self.start or p > self.stop : return None
+    if not self.is_contain(p, strict) :
+      if flank <= 0: return None
+      else: return self.flank_pos(p, flank)
     pos = 0
     for e in self.exons:
       if e.is_upstream(p, strict) : return None
       if e.is_contain(p, strict) : return pos + abs(p - e.end5) # e.start <= p <= e.stop:
-        #if self.is_reverse():
-          #pos += e.stop - p
-        #else:
-          #pos += p - e.start
-        #return pos
       pos += len(e)
     return None
   def is_exon(self, p, strict = False):
@@ -661,7 +681,7 @@ def gtfgene_iter(fin, filt = [], gff = False, addchr = False, chrs = None, verbo
       genes[g.id] = g
       genes2[g.id] = g
       #if g.id not in gidlist: gidlist.append(g.id)
-    elif lst[2] == 'transcript':
+    elif lst[2] in ('transcript', 'mRNA', 'tRNA', 'rRNA'):
       t = gtfTrans(lst, gff, addchr)
       if t.gid not in genes:
         g = gtfGene(lst, gff, addchr)
