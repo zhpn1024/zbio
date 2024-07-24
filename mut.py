@@ -9,6 +9,33 @@ except:
   def cmp(a, b):
     return (a > b) - (a < b)
 
+def normvar(ref, alt):
+  l1, l2 = len(ref), len(alt)
+  if l1 == 1 or l2 == 1:
+    return ref, alt, 0
+  if l1 > l2:
+    short, long = alt, ref
+    refshort = False
+  else:
+    short, long = ref, alt
+    refshort = True
+
+  nt = 0 # trim length
+  for i in range(1, len(short)):
+    s = short[i:]
+    if long.endswith(s):
+      nt = len(short) - i
+      break
+  if nt > 0:
+    ls = len(short) - nt
+    short = short[0:ls]
+    ls = len(long) - nt
+    long = long[0:ls]
+
+  if refshort: return short, long, nt 
+  else: return long, short, nt
+
+
 class Mut:
   def __init__(self, chr, pos, mutseq, reflen=1):
     self.chr = chr
@@ -35,6 +62,14 @@ class Mut:
   def __cmp__(self, other):
     return cmp(self.chr, other.chr) or cmp(self.pos, other.pos) or cmp(other.indel, self.indel)
 
+  def __lt__(self, other):
+    c = self.__cmp__(other)
+    return c < 0
+
+  def __gt__(self, other):
+    c = self.__cmp__(other)
+    return c > 0
+
   @property
   def end(self):
     return self.pos + self.reflen
@@ -55,28 +90,30 @@ class MutGenome(fa.Fa):
     self.mutregion = {0:{}, -1:{}, 1:{}} # {0:interval.Interval(), -1:interval.Interval(), 1:interval.Interval()}
     self.allmut = {}
 
-  def add_mut(self, mut, check=True):
+  def add_mut(self, mut, check=True, replace=False):
     chr = self.get_chrname(mut.chr)
     if chr is None :
       print("chr id {} not found in fasta file!".format(mut.chr))
-      return None
+      return -1
     if chr != mut.chr: mut.chr = chr
     s = str(mut)
     self.allmut[s] = mut
     indel = mut.indel
     update(self.mutpos[indel], chr, {}, replace=False)
-    update(self.mutregion[indel], chr, interval.Interval(), replace=False)
+    update(self.mutregion[indel], chr, interval.Interval(adj_merge=False), replace=False)
     if check:
       mi = interval.Interval(mut.pos, mut.end)
       for ind in self.mutregion:
         if chr in self.mutregion[ind]:
           mii = mi.intersect(self.mutregion[ind][chr])
           if len(mii) > 0:
-            print('Mutation contradict with current mutation: {} {} {} {}'.format(mut, ind, chr, mii.start, mii.stop, self.mutpos[ind][chr][mii.start]))
+            print('Mutation contradict with current mutation: {} {} {} {} {} {}'.format(mut, ind, chr, mii.start, mii.stop, self.mutpos[ind][chr][mii.start]))
+            if not replace: return 1
     self.mutregion[indel][chr].add_itv([mut.pos, mut.end], check)
     update(self.mutpos[indel][chr], mut.pos, s)
     for p in range(mut.pos+1, mut.end):
       update(self.mutpos[indel][chr], p, s)
+    return 0
 
   def check(self):
     for indel in self.mutregion:

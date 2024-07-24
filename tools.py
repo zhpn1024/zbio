@@ -358,6 +358,34 @@ def non_overlap_lists(lst):
     nolists.append([b])
   return nolists
 
+def range_to_bins(start, end):
+  binOffsets = [512+64+8+1, 64+8+1, 8+1, 1, 0]
+  binFirstShift = 17    # How much to shift to get to finest bin.
+  binNextShift = 3     # How much to shift to get to next larger bin.
+  startBin = start
+  endBin = end - 1
+  startBin >>= binFirstShift
+  endBin >>= binFirstShift
+  for bo in binOffsets:
+    if startBin == endBin: return bo + startBin
+    startBin >>= binNextShift
+    endBin >>= binNextShift
+
+def bins_overlap_range(start, end):
+  binOffsets = [512+64+8+1, 64+8+1, 8+1, 1, 0]
+  binFirstShift = 17    # How much to shift to get to finest bin. 
+  binNextShift = 3     # How much to shift to get to next larger bin. 
+  bins = []
+  startBin = start
+  endBin = end - 1
+  startBin >>= binFirstShift
+  endBin >>= binFirstShift
+  for bo in binOffsets:
+    for j in range(startBin, endBin+1):
+      bins.append(bo + j);
+    startBin >>= binNextShift
+    endBin >>= binNextShift
+  return bins;
 
 
 

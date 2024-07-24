@@ -3,6 +3,21 @@ Genomic haplotype processing
 Copyright (c) 2017 Peng Zhang <zhpn1024@163.com>
 '''
 
+def D_norm(cnts):
+  t = float(sum(cnts[0]) + sum(cnts[1]))
+  p1, p2 = (cnts[0][1] + cnts[1][1]) / t, (cnts[1][0] + cnts[1][1]) / t
+  af1, af2 = [1-p1, p1], [1-p2, p2]
+  #print(t, p1, p2)
+  if min(af1) == 0 or min(af2) == 0: return None
+  m, mi, mj = 1, 0, 0
+  fe = [[1,1], [1,1]]
+  for i in range(2):
+    for j in range(2):
+      fe[i][j] = cnts[i][j] / (t*af1[i]*af2[j])
+      if m > fe[i][j]: m, mi, mj = fe[i][j], i, j
+  if i == j: return m-1
+  else: return 1-m
+
 class SNP:
   def __init__(self, chr, pos, ref, alt, a1 = '.', a2 = '.', score = 1):
     self.chr, self.pos = chr, pos
