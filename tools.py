@@ -213,6 +213,7 @@ def overlap_iter(bedIterA, bedIterB, func=overlap, ignoreStrand = True, chrcmp =
       else: break
       lst.append(a)
     if c == 0 : Aend = True
+    if Aend and len(lst) == 0: break
     #print len(lst)
 
 def rand_overlap_iter(bedIterA, bedListB, func=overlap, ignoreStrand = True): # ListB should have no overlap
@@ -388,5 +389,10 @@ def bins_overlap_range(start, end):
   return bins;
 
 
+def numround(f, r1 = 4, r2 = 2):
+  f = float(f)
+  if f == 0: return '0.0'
+  if abs(f) < 0.001: return ('%.{}e'.format(r2) % (f)) .replace('e-0', 'e-')
+  return '%.{}f'.format(r1) % (f)
 
 
