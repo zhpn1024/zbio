@@ -18,7 +18,7 @@ def overlap(A, B):
   '''
   if A is overlapping with B.
   '''
-  if(A.chr != B.chr) : return False
+  if chrcmp(A.chr, B.chr) != 0 : return False
   if (A.stop <= B.start) : return False
   if (B.stop <= A.start) : return False
   return True
@@ -173,10 +173,10 @@ def cover_iter(bedIter, weight= lambda x: 1):
     current[0:i] = []
     clen = len(current)
     
-def overlap_iter(bedIterA, bedIterB, func=overlap, ignoreStrand = True, chrcmp = cmp, counts = [0,0]): ### Need Revise!!
+def overlap_iter(bedIterA, bedIterB, func=overlap, ignoreStrand = True, chrcmp = chrcmp, counts = [0,0], alist = []): ### Need Revise!!
   '''overlap of two bed iteraters (files), both should be sorted.
   '''
-  lst = []
+  lst = alist # []
   ac = next(bedIterA) # .next() current bed A
   counts[0] += 1
   Aend = False
@@ -389,10 +389,33 @@ def bins_overlap_range(start, end):
   return bins;
 
 
-def numround(f, r1 = 4, r2 = 2):
-  f = float(f)
+def numround(f, r1 = 4, r2 = 2, exact = False):
+  try: f = float(f)
+  except ValueError: return f
   if f == 0: return '0.0'
-  if abs(f) < 0.001: return ('%.{}e'.format(r2) % (f)) .replace('e-0', 'e-')
-  return '%.{}f'.format(r1) % (f)
+  if abs(f) < 0.001:
+    s = ('%.{}e'.format(r2) % (f)) .replace('e-0', 'e-')
+    if not exact:
+      s = s.replace('0e', 'e')
+      s = s.replace('.e', '.0e')
+  else:
+    s = '%.{}f'.format(r1) % (f)
+    if not exact:
+      s = s.rstrip('0')
+      if s.endswith('.'): s += '0'
+  return s
 
-
+def downsample_even(arr, n):
+  l = len(arr)
+  if l <= n: return arr
+  out = []
+  m = l * n * 2
+  #print(m)
+  d = l * 2 # float(l) / n
+  s = l # d / 2
+  for i in range(n):
+    j = s // n // 2 # int(s)
+    #print(s, j)
+    out.append(arr[j])
+    s += d
+  return out

@@ -174,3 +174,106 @@ def orfShow(ax, orfs, start = 0, stop = -1, col = ['r','g','b'], cds = [None, No
     ax.bar(lz[i], [0.04]*len(lz[i]), color='k', bottom=2-i+0.48, width=3, edgecolor='k', align='edge')
   ax.set_title(title)
   
+
+def hapShow(hapdata, main_ax, tree_ax, size = (10, 5), dist = None, markgrp = None, title = None): # hapdata need to be well ordered
+  mg = {}
+  if markgrp is not None:
+    for i, s in enumerate(markgrp.split(',')):
+      mg[s] = 'C{}'.format(i)
+  #print(markgrp, mg)
+  #gs = GridSpec(1, 4, wspace=0.0)
+  #main_ax = subplot(gs[0,1:4])
+  main_ax.set_frame_on(False)
+  main_ax.yaxis.set_visible(False)
+  main_ax.set_xlabel('Variants')
+  if title is not None: main_ax.set_title(title)
+  #tree_ax = subplot(gs[0,0],sharey=main_ax)
+  tree_ax.set_frame_on(False)
+  tree_ax.xaxis.set_visible(False)
+  tree_ax.set_ylabel('Haplotypes')
+  #tree_ax.axis('off')
+  #fp, axarr = subplots(1, 2, sharey=True, figsize= size)
+  y = 0
+  ybd = {} # y boundaries for groups
+  hmerge = {} # local hap merge, degeneracy
+  n = len(hapdata)
+  for j, d in enumerate(hapdata):
+    #print(d)
+    grp, cnt, hap, dis = d
+    y1 = y + cnt
+    for i in range(1, len(grp)+1):
+      g = grp[0:i]
+      if g not in ybd: ybd[g] = [y, y1, []]
+      else: ybd[g][1] = y1
+    ybd[grp][2].append((y, y1, dis))
+    p = hap.find('1')
+    while p >= 0:
+      p1 = hap.find('0', p)
+      if p1 < 0: p1 = len(hap)
+      width = p1 - p
+      key = p, p1
+      if key in hmerge and y+cnt <= hmerge[key]: pass # merged by previous block
+      else:
+        cntb = cnt
+        for j1 in range(j+1, n):
+          grp1, cnt1, hap1, dis1 = hapdata[j1]
+          if hap1[p:p1].find('0') >= 0: break
+          cntb += cnt1
+        if cntb > cnt: 
+          yb = y + cntb
+          hmerge[key] = yb
+        main_ax.bar(x=p, height=cntb, bottom=y, width=width, align='edge', color='black', alpha=1)
+      p = hap.find('1', p1)
+    y = y1
+
+  glevels = {}
+  #print(ybd)
+  for g in ybd:
+    l = len(g)
+    if l not in glevels: glevels[l] = {}
+    glevels[l][g] = ybd[g]
+  if markgrp is None:
+    for i, g in enumerate(glevels[1]):
+      mg[g] = 'C{}'.format(i)
+
+  for g in mg:
+    if g in ybd: main_ax.bar(x=0, height=ybd[g][1]-ybd[g][0], bottom=ybd[g][0], width=len(hap), align='edge', color=mg[g], alpha=0.2)
+  for l in range(4, 0, -1):
+    #print(l)
+    if l not in glevels: continue
+    for g in sorted(glevels[l]):
+      y, y1, leafs = glevels[l][g]
+      color = 'black'
+      if g in mg: color = mg[g]
+      else:
+        for i in range(1, len(g)+1):
+          gup = g[0:i]
+          if gup in mg:
+            color = mg[gup]
+            #break
+      #ymean = (y + y1) / 2
+      if dist is None: d0, d1 = l-1, l ### 
+      else:
+        d1 = dist[g]
+        if len(g) > 1: d0 = dist[g[:-1]]
+        else: d0 = 0
+      for leaf in leafs:
+        ly, ly1, ldis = leaf
+        lymean = (ly + ly1) / 2
+        if ly+1 < ly1: tree_ax.plot([ldis, ldis], [ly, ly1], color=color, alpha=0.3)
+        tree_ax.plot([d1, ldis], [lymean, lymean], color=color, alpha=0.3)
+        for i in range(1, len(g)+1):
+          gup = g[0:i]
+          if ybd[gup][0] == ly: ybd[gup][0] = lymean
+          if ybd[gup][1] == ly1: ybd[gup][1] = lymean
+      y, y1, leafs = glevels[l][g] # ybd[g]
+      ymean = (y + y1) / 2
+      if y+1 < y1: tree_ax.plot([d1, d1], [y, y1], color=color, alpha=0.3)
+      tree_ax.plot([d0, d1], [ymean, ymean], color=color, alpha=0.3)
+      if g in mg: tree_ax.text(d0, ymean, g, color=color, va='center')
+      #print(l, ymean, g)
+      for i in range(1, len(g)+1):
+        gup = g[0:i]
+        if ybd[gup][0] == y: ybd[gup][0] = ymean
+        if ybd[gup][1] == y1: ybd[gup][1] = ymean
+
